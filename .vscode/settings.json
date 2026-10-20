@@ -1,0 +1,72 @@
+{
+  // ===========================================================================
+  //  Tailwind CSS IntelliSense (extension id: bradlc.vscode-tailwindcss)
+  // ---------------------------------------------------------------------------
+  //  This project uses Tailwind v4 with the **CSS-first** configuration: the
+  //  entry point is app/assets/input.pcss and there is deliberately no
+  //  tailwind.config.js. The extension activates only when it finds a CSS
+  //  entry point (auto-detection looks for *.css), so the file is named here
+  //  explicitly - without this setting the .pcss file stays invisible to it and
+  //  you get no completions anywhere in the project.
+  // ===========================================================================
+  "tailwindCSS.experimental.configFile": "app/assets/input.pcss",
+
+  // `.pcss` is not a language VS Code knows (it would be plaintext). Open it in
+  // the extension's own language mode so `@import "tailwindcss"`, `@source` and
+  // `@theme` are highlighted and validated instead of flagged as unknown at-rules.
+  "files.associations": {
+    "*.pcss": "tailwindcss"
+  },
+
+  // The UI is written in Python: Dash builds the DOM from `ui.py` /
+  // `app/components/*.py`. Mapping Python onto the markup mode is what lets the
+  // extension look for `className="..."` inside a .py file at all.
+  "tailwindCSS.includeLanguages": {
+    "python": "html"
+  },
+
+  // ---------------------------------------------------------------------------
+  //  The exact shapes in which this repository writes class strings. Each entry
+  //  is [what to match, what to extract as the class string] (documented
+  //  extension format). **Repository rule: every class string is written out in
+  //  full inside a `className`/`extra` argument** - no lookup table, no f-string,
+  //  no `"bg-" + tone`. A new way of writing class strings needs a new regex
+  //  here, otherwise the editor silently stops completing that one (the compiler
+  //  would still find it - Tailwind scans the raw file text - but the editor is
+  //  what tells you that a class name does not exist).
+  // ---------------------------------------------------------------------------
+  "tailwindCSS.experimental.classRegex": [
+    // className="grid gap-4 md:grid-cols-2"
+    // className="flex cursor-pointer items-center gap-3 "
+    //           "p-3 sm:p-4"                     <- implicit concatenation over lines
+    // extra="w-full sm:w-auto"                  <- ui.button(..., extra=...)
+    // labelClassName="flex min-h-11 cursor-pointer " "items-center"   <- matches too
+    [
+      "(?:className|extra)\\s*=\\s*f?((?:\"[^\"]*\"[ \\t]*\\n\\s*)*f?\"[^\"]*\")",
+      "\"([^\"]*)\""
+    ],
+    // a parenthesised class string - the shape of the size/tone variants of ui.button,
+    // ui.badge and ui.alert and of the "one colour or the other" branches:
+    // className=("min-h-8 rounded-md px-2.5 py-1 text-xs font-medium transition-colors "
+    //            "bg-slate-900 text-white hover:bg-slate-700 " if compact and tone == "dark" else
+    //            ...)
+    [
+      "className\\s*=\\s*\\(([^)]*)\\)",
+      "\"([^\"]*)\""
+    ]
+  ],
+
+  // VS Code never triggers completions inside string content by default, and that
+  // is exactly where these class names live. Scoped to the two languages that
+  // contain class strings, so no other kind of file gets popups while typing.
+  "[python]": {
+    "editor.quickSuggestions": {
+      "strings": "on"
+    }
+  },
+  "[html]": {
+    "editor.quickSuggestions": {
+      "strings": "on"
+    }
+  }
+}

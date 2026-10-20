@@ -1,0 +1,59 @@
+{
+  // Terminal -> Run Task (or Ctrl/Cmd+Shift+B for the default build task).
+  //
+  // The compiled CSS is an ARTEFACT: Tailwind runs once and Dash then serves
+  // app/assets/tailwind.css statically - there is no JIT in the browser. A class that is
+  // added to app/**/*.py therefore does nothing until the CSS is rebuilt.
+  //
+  //   Tailwind: build   one-shot, minified  -> commit/deploy this result
+  //   Tailwind: watch   dev mode: rebuilds on every change; Ctrl-C stops it
+  //   Tailwind: check   are the committed CSS and the sources still in sync?
+  //
+  // `watch` writes the same minified file as `build`, so switching back and forth needs
+  // no extra step: run `watch` while editing, Ctrl-C, run `build` (or `check --fix`)
+  // before committing. `npm run css` in a terminal does exactly the same.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Tailwind: build",
+      "detail": "npm run css - rebuild app/assets/tailwind.css (minified)",
+      "type": "shell",
+      "command": "npm run css",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Tailwind: watch",
+      "detail": "npm run watch - dev mode, rebuilds on every change (Ctrl-C stops it)",
+      "type": "shell",
+      "command": "npm run watch",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Tailwind: check",
+      "detail": "css_check.py + tailwind_class_check.py - stale CSS? class name outside a className?",
+      "type": "shell",
+      "command": "python tools/css_check.py && python tools/tailwind_class_check.py",
+      "problemMatcher": [],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    }
+  ]
+}

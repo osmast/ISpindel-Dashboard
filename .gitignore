@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+tailwindcss
+data/
+node_modules/
+
