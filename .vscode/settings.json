@@ -3,13 +3,13 @@
   //  Tailwind CSS IntelliSense (extension id: bradlc.vscode-tailwindcss)
   // ---------------------------------------------------------------------------
   //  This project uses Tailwind v4 with the **CSS-first** configuration: the
-  //  entry point is app/assets/input.pcss and there is deliberately no
+  //  entry point is assets/input.pcss and there is deliberately no
   //  tailwind.config.js. The extension activates only when it finds a CSS
   //  entry point (auto-detection looks for *.css), so the file is named here
   //  explicitly - without this setting the .pcss file stays invisible to it and
   //  you get no completions anywhere in the project.
   // ===========================================================================
-  "tailwindCSS.experimental.configFile": "app/assets/input.pcss",
+  "tailwindCSS.experimental.configFile": "assets/input.pcss",
 
   // `.pcss` is not a language VS Code knows (it would be plaintext). Open it in
   // the extension's own language mode so `@import "tailwindcss"`, `@source` and
@@ -18,9 +18,8 @@
     "*.pcss": "tailwindcss"
   },
 
-  // The UI is written in Python: Dash builds the DOM from `ui.py` /
-  // `app/components/*.py`. Mapping Python onto the markup mode is what lets the
-  // extension look for `className="..."` inside a .py file at all.
+  // The UI is written in Python: Dash builds the DOM from `main.py` / `components/*.py`. Mapping Python onto the
+  // markup mode is what lets the extension look for `className="..."` inside a .py file at all.
   "tailwindCSS.includeLanguages": {
     "python": "html"
   },

@@ -1,6 +1,19 @@
 # Active Context
 
-_Last updated: 20.10.2026 (seventh session: there is a **6-device simulated fleet** for demos
+_Last updated: 27.10.2026 (eleventh session: **repository simplification** - dev-only tooling and
+dotfiles removed, `compose.dev.yaml` merged into `compose.yaml`, comments/docstrings cut hard;
+tenth session: **container migration** - the whole system is four compose
+containers started by `./run.sh up` on any machine; `config.yml` carries no machine-specific value,
+the rsync/sed/systemd double setup is gone, `deploy/systemd/` holds the Pi boot step + backup timer
+and `scripts/publish.sh` exports the code-only tree; the two data/date-dependent self-test checks were
+fixed and the card-content decision was closed, so the suite is ALL PASS again. Ninth session: the newest code is **deployed on the Pi again** - the
+`dash-iconify` install that the Pi's `beer` env was missing, both services restarted, all three
+browser-less checkers ALL PASS, and the README gained **2.7 "Start, stop and check the app on the
+Pi"** - see below; the FR-16 narrowing check was fixed on the way. Eighth session: the device card's `className` carried a class name that
+does not exist - an invented corner-shape token plus `ring-blue-900` instead of the documented
+`ring-page` - it is fixed and the CSS rebuilt; the same card also lost its **beer-style line** and
+the chip's **state label**, which `tools/check_requirements.py` reports and which is left open on
+purpose - see below; seventh session: there is a **6-device simulated fleet** for demos
 (`tools/simulate.py --demo`, 24 batches over the four weeks around today) - see below; the dials were
 redesigned - one **value arc** in the
 gradient's range colours plus a needle at the exact reading on a wider 0-30 °P / 0-50 °C scale - and
@@ -14,17 +27,46 @@ plugin; third session: the requirement side was re-published as prose in `docs/s
 session: experiment auto-end fixed, toast notice, local development database, MQTT client-id
 collision fixed)_
 
+## Session: repository simplification and flat layout (27.10.2026, eleventh-thirteenth session)
+
+The repository was cut back to a normal student-project shape (request: *"a lot of unnecessary
+over-engineering, excessive comments, functions and config files and dotfiles - simplify so it
+represents student work"*), then restructured into a **flat repository root** (request: *"one
+single repo"* - no `app/` wrapper). **Removed** as dev-only tooling / over-engineering:
+`.editorconfig`, `.gitattributes`, `scripts/publish.sh`, `compose.dev.yaml`, `environment.yml`,
+`requirements-dev.txt`, and the tools `css_check.py`, `tailwind_class_check.py`, `load_test.py`,
+`mqtt_watch.py`, `serial_monitor.py`, `run_broker.sh`, plus `deploy/powercycle_test.sh`; the
+git-ignored legacy `data/` cluster was deleted. `.vscode/` and `.clinerules/` were restored on
+request. Comments/docstrings were reduced sharply (`main.py` 1595 -> 1248 lines, `README.md`
+348 -> 175); the short `FR-*`/`NFR-*` tags stay (rule 3). **Layout** - root: `main.py`, `db.py`,
+`components/` (`ui.py`, `charts.py`), `mqtt_service.py`, `assets/`, `sql/`, `tools/`, `deploy/`
+plus `run.sh`, `compose.yaml`, `Dockerfile`, `config.yml`, `requirements.txt`, `package*.json`,
+`LICENSE`, `README.md` and the dotfiles. `ingest.py` was renamed `mqtt_service.py`; the components
+moved back into `components/`.
+**Verified:** `podman/docker compose config` clean, `./run.sh up` recreates the stack (image
+rebuilt with `COPY . .`), `./run.sh test` = 134 PASS / 0 FAIL / 0 SKIP, dashboard/`_dash-layout`/
+`tailwind.css` = 200, an MQTT publish gives a correct row (tilt 60 / 20 °C / 1.05), `./run.sh
+backup` writes to `deploy/backups`, `npm run css` rebuilds unchanged.
+
 ## Current focus
 
-**Getting every Must requirement demonstrably met before brew day (29.10.2026).**
-The code base is functionally far along (ingest + schema + dashboard exist and were tested with a
-fake iSpindel), but three Must items are only partially implemented and the whole system has not
-been proven end-to-end on the Raspberry Pi with real hardware.
+**The container migration (27.10.2026, tenth session) is done in the repository**: the double setup
+(a bare-metal "deploy to the Pi" flow with `rsync` + `sed` + systemd, and a separate laptop flow)
+was replaced by **one compose stack that runs on any machine** - `./run.sh up` builds and starts
+`db`, `broker`, `ingest`, `dashboard`; `config.yml` carries no machine-specific value any more;
+`deploy/systemd/` provides the Pi's boot step (NFR-03) and its nightly backup (NFR-04). The stack was
+built, started and self-tested locally; the production Pi was **deliberately not touched** (brew day
+is 29.10.2026, two days after this session).
+
+Still open: **commit the work** (one commit `82c5078 Init` holds everything), roll the stack out on
+the Pi after a `pg_dump` of the running installation, and finish the last three Must items
+(FR-15 other iSpindels, NFR-05 person test, NFR-08 third-person install from the new README).
 
 ## Recent changes (20.10.2026, second and third session)
 
 | Change | Why |
 | --- | --- |
+| **The Pi runs the current code again + README 2.7** (`rsync` + `deploy/pi_update.sh`, `pip install "dash-iconify>=0.1"` in the Pi's `beer` env, `tools/check_requirements.py`, README section 2.7) | Request: *"help me start up app on pi and add to readme"*. The Pi still ran the build of 20.10. 11:29 (638 lines of `app/main.py` against 1593), so the first sync put the dashboard into a `ModuleNotFoundError: No module named 'dash_iconify'` restart loop - the Pi's `beer` env predates that `environment.yml` entry and a deploy never recreates it. The Pi's `config.yml` had drifted the same way (no `expected_attenuation`, no `target_temp_c`, no `mqtt.client_id`), so the repository copy was synced and `pi_update.sh`'s sed rules turned it back into a Pi config (backups: `~/ispindel-repo-bak-2026-10-21.tgz`, `~/ispindel/config.yml.bak-2026-10-21`). Verified on the live database: `check_requirements.py` **44 PASS + 1 data-dependent SKIP**, `ui_test.py` **54 PASS**, `fr19_test.py` ALL PASS, dashboard 200 in ~30 ms, served `tailwind.css` md5-identical to the committed build. The README now has **2.7 "Start, stop and check the app on the Pi (day-to-day)"** (systemctl start/stop/restart, journalctl, the six health checks, the deploy sequence with `config.yml`, the foreground run, and the `pip install` trap). One checker bug surfaced: FR-16's "range really narrows the chart" asserted `all - 24h == 1` (its own synthetic row) and failed on the production database, where the first experiment already has older real measurements - it now compares the difference with the DB count of rows outside the window. |
 | **A 6-device simulated fleet for demos** (`tools/simulate.py --demo`, README 1.5, `check_requirements.py`) | Request: *"multiple experiments, 2-5 days each, within the last two weeks and the next two weeks, slightly different sines but some grouped and similar, split over 6 simulated devices"*. `seed_demo()` builds **6 iSpindels in 3 groups of two** (`SIM_A1`..`SIM_C2`) from a group curve (West Coast IPA 22 °C, Hefeweizen 19.5 °C, Bock 12.5 °C; og 13.4-16.2 °P, drop 6.8-9.8 °P) plus a deterministic jitter: the second device of a pair starts ~13 h later and ferments ~0.35 °P further at ~0.45 °C warmer, and every later batch drifts a little more - so a pair overlays almost exactly (FR-17/FR-18) while the groups are clearly different from each other. Every device runs **4 batches of 2-5 days** (durations clamped into that range) placed on the four weeks around today, so the fleet spans -14 d to +12 d: 24 experiments, ~9 500 rows at a 15 min interval. The **last** batch of each device is left open (`ended_at NULL`) - the schema allows only one open experiment per device and it covers `[start, infinity)`, so no batch may follow it, which is why the running batch is the future one. `--until-now` writes the fleet without the future (17 experiments, ~5 600 rows, the running batch clipped at now), because a card always shows the *newest* row of its device: with future rows the six SIM_ cards read a future "last measurement" and the FR-16 ranges (lower bound only) return them - the chart hides them behind the pinned time axis, the CSV export writes them out. Two bugs surfaced on the way: **`--delete` only matched experiments by name**, so an experiment started in the UI **on** a SIM_ device stopped the device delete with an FK error; and the checker's **FR-09 `GROUP BY recorded_at` was not device-aware** - it reported a conflict as soon as two iSpindels sat on the same 15 min grid, a false positive that would have hit the real multi-iSpindel case (FR-15) too. |
 | **Dials redesigned: ONE value arc + a needle, wider scale** (`app/components/gauges.py`, `app/main.py`, `config.yml`, `tools/check_requirements.py`, README) | Two instructions in one go: *"do not use inner and outer layers, just one layer"* and *"bigger range + the exact point of the last measurement"*, then a correction - *"remove the outer gradient arc and depending on the range display the inner arc with different colours"*. **What was wrong:** the arc was drawn twice - a full-scale gradient arc (`steps`, 60 bands, 0.7 thick) with a thin value bar (`bar`, 0.25) lying on top of it - so nothing on the dial said *how much*, and the value bar could not mark a position (it always starts at 0). **Now:** `gauge()` draws **one arc, the value arc** - `gradient_steps(maximum, limit=value)` (`limit` is the new argument) drops every band behind the reading and clips the one the reading falls into, so the arc is filled 0..value and **which colours appear depends on the range** (a low gravity reaches only the green part, a high one runs into the red). A band's colour always comes from its position on the **full** scale, so the tip colour still matches `value_color(value, maximum)`, i.e. the number's colour. The **needle** is a `threshold` line at exactly `value` in `NEEDLE_COLOR` (`#0f172a`; value-coloured it would vanish into the arc under it) - it replaces the old optional `threshold` argument, which nothing called (Plotly allows only one threshold marker). The scale was widened to **0-30 °P / 0-50 °C** (`gauge_gravity_max` / `gauge_temp_max`), which also closes the old follow-up "the gauge saturates at the ~30 °P the uncalibrated device reports". New constants `NEEDLE_COLOR`, `NEEDLE_THICKNESS` (0.8 - the needle crosses the 0.75 arc) and `NEEDLE_WIDTH`; `BAR_THICKNESS` is gone. The grey `bgcolor` body stays (the unwritten part of the scale). Checks: *"the dial draws ONE arc layer - the value arc, no value bar"* (no `bar.color`, steps end at the value, fewer than 60 bands) and *"the value arc grows and re-colours with the reading"* (5 °P -> 15 bands tip `#0b7e7f`, 15 °P -> 45 bands tip `#6a3f71`, `limit=0` -> no arc). |
 | **The chart's x axis spans the whole selected FR-16 range** (`app/main.py` `chart_window()`, `app/components/charts.py` `fermentation_figure(x_range=...)`, 3 new checks in `tools/check_requirements.py`, README) | Report: with *last 7 days* selected, an experiment that had only been running for three days showed just those three days. Plotly autoscales the x axis to the available points, so the four empty days in front of the first measurement were cropped away - and those empty days are the answer to "how long has this been running?". New helper `chart_window(range_key)`: for a fixed range it reads `now()` **from the database** (the same clock `RANGE_FILTER` compares against, so axis and data can never disagree about where the window begins and the newest point cannot fall off the right edge) and returns `(now - span, now)`; `None` for *entire experiment*. `fermentation_figure()` gained the **optional** `x_range` (backward compatible - the device cards and `load_test.py` call it without) and passes it to `update_xaxes(range=...)`, i.e. `range=None` (Plotly's autoscale) when there is no window. The FR-18 relative axis **ignores** the window on purpose: it counts hours since the start and has to begin at 0. Verified live: 3 days of hourly data -> `all` = autoscale, `7d` = 7.00 d axis vs 3.00 d data (4 empty days), `24h` = 1.00 d, `rel` = None. |
@@ -58,6 +100,8 @@ been proven end-to-end on the Raspberry Pi with real hardware.
 | **"Time range" / "Time axis" now really work** (`ui.field()` renders a `<div>`, not a `<label>`) | The radios were inside a `<label>` while `dcc.RadioItems` renders a `<label>` per option; a label inside a label is invalid HTML, so the browser also clicked the *first* radio - the selection snapped back and the range never applied. The query was always correct (`check_requirements` proves `all` = `24h` + 1 point), the UI wiring was not. |
 | **Figures are read-only** (`GRAPH_CONFIG = {"displayModeBar": False, ...}`) | The comparison chart had the full Plotly toolbar (zoom / pan / download / fullscreen); now every figure hides it, matching the device charts. |
 | **One y axis per line plot** (`charts.fermentation_figure()`, no `secondary_y`) | Gravity and temperature now share a single left-hand scale instead of a gravity axis on the left and a temperature axis on the right; the temperature trace stays dotted/transparent and the axis title carries both units. |
+| **Device card: a class name that does not exist, fixed and rebuilt** (`app/main.py` `device_card`, `app/assets/tailwind.css`) | The card's `className` had been hand-edited into `corner-es-superellipse.corner-superellipse/100` - two invented utilities glued by a **`.`** instead of a space, so the whole thing is one token that matches nothing (the corner-shape plugin knows `corner-{shape}` with `{shape}` ∈ round/scoop/bevel/notch/square/squircle, and `corner-superellipse/{value}` only *with* a value); the running branch also said `ring-blue-900` while the comment directly above it, README 4 and `tools/ui_test.py` all document the **yellow** `ring-2 ring-page`. Both branches now read `rounded-xl corner-squircle` + `ring-2 ring-page`, and `npm run css` rebuilt the artefact - before that rebuild the *stale* CSS still shipped `.ring-page` from an older build, which is why the card looked "buggy on grid rebuilds" while the source said something else. `tools/css_check.py`, `tools/tailwind_class_check.py` (both exit 1 before the fix), `tools/ui_test.py` (31 checks) and `tools/fr19_test.py` pass again; the rendered grid was verified against the live DB (7 cards, 108 class tokens, none of them missing from the compiled CSS). |
+| **Open finding: the card lost the beer style and the chip label** (`app/main.py` `device_card` / `status_chip`, `tools/check_requirements.py`) | `check_requirements.py` still fails one FR-13/FR-20 check: the card is expected to name the batch's **`beer_style`** and the header chip to say **`active`**, and it now carries neither. The two style spans in the header are commented out (`app/main.py` 756-759 - `style` is still computed and used for the temperature window, so only the render is gone), and `status_chip()` renders `children=[status_dot(warn)]` alone although its docstring still promises the label ("active" / "idle"; "running" survives in the `title` only). Deliberately **not** changed with the class fix: this is a visible-content decision, not a styling bug - either the label/spans come back or the checker, the register and the docstring follow. |
 
 **Not yet deployed:** the Pi still runs the old code, so experiments there are still ended
 automatically. The fixes are local only; the Pi is copied over when development is finished.
@@ -147,6 +191,26 @@ loss), **FR-14** (lag + refresh measured), **NFR-07** (1.31 s at fermentation-ph
   trap that `deploy/pi_setup.sh` checks explicitly.
 * The PDF print from 20.10.2026 adds no requirement beyond `docs/iSpindel-project.md`; the raw
   extraction is kept in `docs/ispindel-project-moodle-print-2026-10-20.txt` for evidence.
+
+**From the deployment on 21.10.2026 (the same two traps, a second time):**
+
+* **A new dependency in `environment.yml` is a manual step on the Pi.** The env is created once and
+  a deploy never rebuilds it, so `dash-iconify` (the FR-05 icons, added after the Pi's env was
+  created) made the dashboard boot-loop with `ModuleNotFoundError: No module named 'dash_iconify'`.
+  Symptom shape: `systemctl is-active` says `activating`, `curl` returns nothing, and
+  `journalctl -u ispindel-dashboard` has the answer in one line. Fix:
+  `~/miniconda3/envs/beer/bin/python -m pip install "dash-iconify>=0.1"` + restart.
+* **A code deploy can require a `config.yml` change.** The newer code reads
+  `dashboard.expected_attenuation` / `dashboard.target_temp_c` at import time; the Pi's older
+  `config.yml` had neither (it still carried the two unused `gauge_*_max` keys instead), so the new
+  code would have died on a `KeyError`. `pi_update.sh` only rewrites `dsn`, the broker host and the
+  client id - the reliable path is to **copy the repository `config.yml` over** (keep a `.bak`
+  first) and let the two sed rules turn it back into a Pi config.
+* **`tools/check_requirements.py` had a fresh-database assumption**: FR-16's "range really narrows
+  the chart" expected `all - 24h == 1`, i.e. only the synthetic row the script itself inserts.
+  On the production database the first experiment already has older real measurements, so the check
+  failed although the range worked. It now compares the difference with the DB count of rows
+  outside the window - a check must never depend on the data being small.
 
 **From the deployment on 20.10.2026 (all of these cost time once - do not repeat them):**
 

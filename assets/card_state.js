@@ -1,13 +1,8 @@
 /* Remembers which accordion cards are open.
  *
- * The cards are plain <details> elements, so the browser toggles them itself - instant, no
- * round trip. But update_dashboard() rebuilds the whole card tree every refresh, and Dash
- * gives a component a React key of its `id`, or else its index path (see createContainer in
- * dash_renderer). A <details> whose key shifts is unmounted and mounted again, which throws
- * away its `open` attribute - that is why the cards kept closing.
- *
- * So on every toggle we push the current open set into the `open_cards` store; main.py
- * renders `open` from it again, and the state survives any remount.
+ * The cards are plain <details> elements, but update_dashboard() rebuilds the card tree every
+ * refresh - a remounted <details> loses its `open` attribute. On every toggle the current open
+ * set is written to the `open_cards` store, and main.py renders `open` from it again.
  */
 (function () {
     "use strict";

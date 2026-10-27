@@ -3,8 +3,8 @@
   "private": true,
   "description": "Tailwind CSS build step for the dashboard (no JavaScript runtime is used)",
   "scripts": {
-    "css": "tailwindcss -i app/assets/input.pcss -o app/assets/tailwind.css --minify",
-    "watch": "tailwindcss -i app/assets/input.pcss -o app/assets/tailwind.css --watch --minify"
+    "css": "tailwindcss -i assets/input.pcss -o assets/tailwind.css --minify",
+    "watch": "tailwindcss -i assets/input.pcss -o assets/tailwind.css --watch --minify"
   },
   "dependencies": {
     "@tailwindcss/cli": "^4.3.3",

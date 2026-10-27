@@ -1,6 +1,15 @@
+# Local state that must never be committed.
+# (No inline comments below: in .gitignore a trailing "#..." is part of the pattern.)
 __pycache__/
 *.pyc
 tailwindcss
-data/
 node_modules/
-
+data/
+memory-bank/
+docs/
+package*.json
+app/deploy/backups/
+config.local.yml
+.venv/
+*.log
+.DS_Store

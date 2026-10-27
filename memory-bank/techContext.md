@@ -14,23 +14,60 @@
 | CSS | Tailwind CSS CLI v4.3.3 (`@tailwindcss/cli`) + plugin `@toolwind/corner-shape` 0.0.8-3, source `app/assets/input.pcss` -> committed `tailwind.css` | `package.json`, `app/assets/input.pcss` |
 | Fonts | IBM XGA-AI (7x15 / 12x20 / 12x23 / "12x20 Plus") from *The Ultimate Oldschool PC Font Pack v2.2* (VileR, CC BY-SA 4.0); `.woff`, page default via `@theme --font-sans`, Plotly figures via `charts.FONT_FAMILY` | `app/assets/fonts/`, `app/assets/input.pcss`, `app/components/charts.py` |
 | Serial debugging | pyserial >= 3.5 | `tools/serial_monitor.py` |
-| Runtime env | Miniconda environment `beer`, Python 3.12, conda-forge only | `environment.yml` |
-| Host | Raspberry Pi, bare metal Raspberry Pi OS 64-bit, user `admin`, repo at `/home/admin/ispindel` | README 2.x |
+| Runtime | **Podman/Docker Compose** - four containers (`db`, `broker`, `ingest`, `dashboard`); the image is `python:3.12-slim` + `requirements.txt`, started by `run.sh` | `compose.yaml`, `Dockerfile`, `run.sh` |
+| Host | **any machine**: macOS laptop, Linux workstation, Raspberry Pi 4/5 (Raspberry Pi OS 64-bit). On the Pi the stack lives in `/srv/ispindel`, runs rootful and autostarts through `deploy/systemd/ispindel.service` | README |
+| Alternative runtime | Miniconda env `beer` (Python 3.12, conda-forge) or `venv` + `requirements-dev.txt` - only for the host-side tools (Tailwind build, serial console, local amqtt broker) | `environment.yml`, `requirements-dev.txt` |
 
-## Environment setup (local, macOS)
+## Repository layout (27.10.2026, eleventh-thirteenth session)
+
+Dev-only extras removed: `.editorconfig`, `.gitattributes`, `scripts/publish.sh`,
+`compose.dev.yaml` (merged into `compose.yaml`), `environment.yml`, `requirements-dev.txt`, and
+the tools `css_check.py`, `tailwind_class_check.py`, `load_test.py`, `mqtt_watch.py`,
+`serial_monitor.py`, `run_broker.sh` plus `deploy/powercycle_test.sh`. `.vscode/` and
+`.clinerules/` were restored on request (their stale paths were fixed). The self-tests
+(`check_requirements.py`, `ui_test.py`, `fr19_test.py`) and the simulators (`fake_spindel.py`,
+`simulate.py`) stay. The Tailwind build (`npm run css`) is checked by eye/README only.
+
+**Flat repository root** (thirteenth session). There is no `app/` wrapper any more - all code sits
+at the repository root next to the entry point:
+
+| Path | What |
+| --- | --- |
+| `main.py` | the Plotly Dash dashboard |
+| `db.py` | PostgreSQL helper |
+| `components/ui.py`, `components/charts.py` | layout components and figures |
+| `mqtt_service.py` | the MQTT ingest service (was `ingest/mqtt_ingest.py`, then `app/ingest.py`) |
+| `assets/` | Dash-served: `tailwind.css`, `input.pcss`, `card_state.js`, `fonts/` |
+| `sql/` | `schema.sql` + `migrations/` |
+| `tools/` | self-tests and simulators |
+| `deploy/` | `mosquitto.conf`, `backup.sh`, `systemd/` |
+
+`main.py` imports `from components import charts, ui`; `gunicorn main:server` (no `--chdir`),
+`PYTHONPATH=/repo`, `python -u mqtt_service.py` for the ingest; the Tailwind `@source` lines are
+`../main.py` and `../components/*.py`. The left-over pre-container PostgreSQL cluster `data/`
+(74 MB, git-ignored) was deleted.
+
+## Environment setup (27.10.2026 - container first, no host services)
 
 ```bash
-conda env create -f environment.yml && conda activate beer
-# local development database: a cluster in data/pg on port 5433 (Docker is not installed here)
-initdb -D data/pg -U ispindel --auth=trust --encoding=UTF8
-pg_ctl -D data/pg -o "-p 5433 -k /tmp" -l data/pg.log start
-createdb -h localhost -p 5433 -U ispindel ispindel
-psql postgresql://ispindel:ispindel@localhost:5433/ispindel -f sql/schema.sql
-npm ci && npm run css          # only after changing Tailwind class names
-python ingest/mqtt_ingest.py   # terminal 1 - subscribes to the Pi's broker, writes locally
-python app/main.py             # terminal 2 -> http://localhost:8080
-python tools/fake_spindel.py --interval 5 --count 10   # terminal 3, only with a local broker
+# the whole system, one command; Podman is preferred, Docker is identical
+podman machine start 2>/dev/null || true   # macOS: Podman runs in a VM
+./run.sh up                                # build + db/broker/ingest/dashboard -> http://localhost:8080
+./run.sh demo                              # optional: 6 simulated devices, 17 batches
+./run.sh test                              # the three self-test suites run INSIDE the container
+./run.sh dev                               # app from app/ with Dash hot reload, no rebuild
+
+# host-side tools only (UI build, serial console, local broker):
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+npm ci && npm run css       # only after changing Tailwind class names
 ```
+
+There is no PostgreSQL cluster, no docker-compose file for the database and no conda requirement
+any more: `compose.yaml` provides PostgreSQL 16 (applies `sql/schema.sql` on the first start) and
+mosquitto. The old local cluster in `data/pg` (port 5433) is dead weight and can be deleted.
+The database of the stack is published on `127.0.0.1:5433` (`ISPINDEL_PG_PORT` to move it) so a
+`psql` on the host can look into it; `./run.sh psql` needs no port at all.
+
 
 ## Key commands / tools in the repo
 
@@ -47,6 +84,9 @@ python tools/fake_spindel.py --interval 5 --count 10   # terminal 3, only with a
 | `npm run watch` | Tailwind **dev mode** - `--watch --minify`, rebuilds on every change, Ctrl-C stops it (same output as `css`) |
 | `python tools/css_check.py [--fix]` | is the committed `tailwind.css` still in sync with the sources? (`--fix` rebuilds it) |
 | `python tools/tailwind_class_check.py` | is every class in the CSS written inside a `className`/`extra`, and nothing missing? (the class-name rule) |
+| `ssh ispindel-pi 'cd ~/ispindel && bash deploy/pi_update.sh'` | deploy step 2 on the Pi: config.yml, view migration, restart both services, verify |
+| `ssh ispindel-pi 'sudo systemctl restart ispindel-ingest ispindel-dashboard'` | start / stop / restart the app by hand (`start`, `stop`, `status` take the same names) |
+| `ssh ispindel-pi 'journalctl -u ispindel-dashboard -n 30 --no-pager'` | why a service is down (first thing to look at) |
 
 ## Deployment facts that matter
 
@@ -54,7 +94,10 @@ python tools/fake_spindel.py --interval 5 --count 10   # terminal 3, only with a
   `160.85.142.209` (public campus address) / `clt-lab-n-1298.zhaw.ch`, repo `/home/admin/ispindel`,
   conda env `beer`, PostgreSQL 17 local, mosquitto local, gunicorn on `0.0.0.0:8080`; both units
   `enabled` with `Restart=always`. Full details in `requirements-traceability.md` -> "Deployment
-  record".
+  record". **Redeployed 21.10.2026** with the newest code (the Pi had still run the 20.10. 11:29
+  build) - see the second deployment record; the Pi now needs `pip install` for every new
+  `environment.yml` entry (that deploy failed on the missing `dash-iconify`), and the day-to-day
+  start/stop commands are README section 2.7.
 * **Access:** `http://clt-lab-n-1298.zhaw.ch:8080` in the campus network. From outside use the
   tunnel `ssh -L 8080:localhost:8080 admin@160.85.142.209` (NFR-02 forbids publishing it).
   A local `~/.ssh/config` alias `ispindel-pi` exists for `ssh`/`scp`/`rsync` (key-only, no
@@ -127,14 +170,37 @@ python tools/fake_spindel.py --interval 5 --count 10   # terminal 3, only with a
   until the rebuild - check with `python tools/css_check.py [--fix]`, and the class-name rule
   with `python tools/tailwind_class_check.py`. `watch` writes the same minified file as `css`
   since 20.10.2026; before that a watch left the artefact unminified and `css_check.py` reported
-  a stale CSS that was not stale. Two context traps that look like the same symptom:
+  a stale CSS that was not stale. There is a third trap of the same symptom: a class name that
+  **is not a class** - the device card carried `corner-es-superellipse.corner-superellipse/100`
+  (two invented utilities glued by a `.` instead of a space) and `ring-blue-900` while the
+  documented colour was `ring-2 ring-page`; the rebuild replaced `.ring-page` from the older
+  build with nothing, so the card silently lost both (fixed 20.10.2026, activeContext). Two
+  context traps that look like the same symptom:
   `group-open:*` needs an ancestor `group`, and `border-slate-200` needs `border` to have a
   width at all.
 
-## Repository state (checked 20.10.2026)
+## Repository state (checked 27.10.2026, after the container migration)
 
-* git repository exists but has **no commits yet** - every file is untracked. Nothing is
-  versioned, so the D3 deliverable is at risk.
-* Leftover file in the repository root: `iSpindel Project _ Moodle ZHAW.html` (Moodle export,
-  belongs in `docs/` or should be deleted).
-* `node_modules/`, `data/`, `__pycache__/`, `tailwindcss` are git-ignored.
+* git repository, branch `main`, remote `https://github.com/osmast/ISpindel-Dashboard.git` (private,
+  returns 404 unauthenticated). Still **one** commit (`82c5078 Init`, 20.10.2026); the whole
+  container migration plus the previously uncommitted work sits in the working tree - commit it.
+* The repository root after the simplification and flat layout (27.10.2026): `main.py`, `db.py`,
+  `components/`, `mqtt_service.py`, `assets/`, `sql/`, `tools/`, `deploy/` plus `run.sh`,
+  `compose.yaml`, `Dockerfile`, `config.yml`, `requirements.txt`, `package*.json`, `LICENSE`,
+  `README.md`, `.dockerignore`, `.gitignore`, `.vscode/`, `.clinerules/`, `docs/`, `memory-bank/`.
+  Removed: `.editorconfig`, `.gitattributes`, `scripts/`, `compose.dev.yaml`, `environment.yml`,
+  `requirements-dev.txt`, the legacy `data/` cluster and the `app/` wrapper.
+* `iSpindel Project _ Moodle ZHAW.html` moved to `docs/ispindel-project-moodle-export.html`;
+  `deploy/pi_setup.sh`, `pi_update.sh` and `pi_powercycle_test.sh` are deleted (rsync + sed + systemd
+  install are gone - `deploy/powercycle_test.sh` + `deploy/systemd/ispindel.service` replace them).
+* The old 1312-line README became `docs/runbook-pre-container-setup.md`; the new `README.md` is the
+  code-only run guide (quick start, containers, config, run.sh, Pi, development, troubleshooting,
+  layout) and is meant to be published.
+* `node_modules/`, `data/`, `deploy/backups/`, `__pycache__/`, `tailwindcss`, `config.local.yml`
+  are git-ignored. There is no publish script any more (removed 27.10.2026) - if a public
+  code-only release is wanted again, the allowlist has to be recreated.
+* **The production Pi still runs the old bare-metal installation** (systemd `ispindel-ingest` /
+  `ispindel-dashboard`, conda, apt postgres/mosquitto, `/home/admin/ispindel`, data of the
+  fermentation phase). Brew day is **29.10.2026**, two days after this session, so the container
+  stack was deliberately **not** rolled out there - the migration recipe is in README ("Coming from
+  an older installation") and keeps `systemctl enable --now` as the rollback.

@@ -1,0 +1,93 @@
+# The whole system as four containers (database, broker, ingest, dashboard).
+#
+#   ./run.sh up     build and start everything   -> http://localhost:8080
+#   ./run.sh dev    same stack, but the app runs from the source tree (Dash hot reload)
+#
+# The `pgdata` volume keeps the measurements across `down`, a rebuild and a reboot
+# (NFR-03/NFR-04). The schema is applied by PostgreSQL itself on the first start.
+name: ispindel
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ispindel
+      POSTGRES_PASSWORD: ispindel
+      POSTGRES_DB: ispindel
+      TZ: UTC                        # stored in UTC, the dashboard converts (NFR-09)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    ports:
+      - "127.0.0.1:${ISPINDEL_PG_PORT:-5433}:5432"    # loopback only; the port only for host psql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ispindel -d ispindel"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  broker:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - brokerdata:/mosquitto/data
+    ports:
+      - "1883:1883"                  # the iSpindel publishes here
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/uptime' -C 1 -W 5 || exit 1"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 5s
+
+  # One MQTT transmission = 7 messages -> exactly one measurement row (FR-11).
+  ingest:
+    image: ispindel-monitor:latest
+    build: .
+    restart: unless-stopped
+    command: python -u mqtt_service.py
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+    environment:
+      # Inside the container network the services are `db` and `broker` (NFR-08).
+      ISPINDEL_DB_DSN: postgresql://ispindel:ispindel@db:5432/ispindel
+      ISPINDEL_MQTT_HOST: broker
+      ISPINDEL_MQTT_CLIENT_ID: ispindel-ingest
+      TZ: UTC
+    volumes:
+      # the source is mounted so an edit only needs a container restart, not a rebuild
+      - ./config.yml:/repo/config.yml:ro
+      - ./mqtt_service.py:/repo/mqtt_service.py:ro
+
+  dashboard:
+    image: ispindel-monitor:latest
+    build: .
+    restart: unless-stopped
+    # `./run.sh dev` replaces this with `python main.py` (Dash hot reload).
+    command: "${ISPINDEL_DASHBOARD_CMD:-gunicorn main:server -b 0.0.0.0:8080 --workers 1 --threads 4 --timeout 120}"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ISPINDEL_DB_DSN: postgresql://ispindel:ispindel@db:5432/ispindel
+      TZ: UTC
+    ports:
+      - "${ISPINDEL_HTTP_PORT:-8080}:8080"      # NFR-02: the LAN opens <host>:8080
+    volumes:
+      - ./config.yml:/repo/config.yml:ro
+      - ./main.py:/repo/main.py
+      - ./db.py:/repo/db.py:ro
+      - ./components:/repo/components
+      - ./assets:/repo/assets
+      - ./tools:/repo/tools:ro
+
+volumes:
+  pgdata:                           # NFR-04: the measurements live here
+  brokerdata:

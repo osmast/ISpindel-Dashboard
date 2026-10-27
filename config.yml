@@ -1,64 +1,38 @@
-# Settings for the iSpindel fermentation monitor.
-# NFR-08: settings live in this file, not in the code.
-# This copy is the **laptop / development** configuration: it stores into a LOCAL
-# PostgreSQL cluster and subscribes to the Pi's broker (the Pi is the broker - see below).
-# The Raspberry Pi deployment rewrites the two machine-specific lines in place - see the
-# `sed` rules in deploy/pi_setup.sh and deploy/pi_update.sh.
-# TODO before the broker moves to a VPS: keep this file out of git (add "config.yml" to .gitignore).
+# Settings for the iSpindel fermentation monitor (NFR-08: settings live here, not in the code).
+# Committed and free of machine-specific values: it describes the single-machine setup that
+# compose.yaml implements, so nothing has to be rewritten on another machine. A container run
+# overrides only the addresses (ISPINDEL_DB_DSN, ISPINDEL_MQTT_HOST, ISPINDEL_MQTT_PORT,
+# ISPINDEL_MQTT_CLIENT_ID); ISPINDEL_CONFIG points a component at a different file.
 
 database:
-  # local development = the PostgreSQL cluster in data/pg on port 5433 (README 1.1)
-  # on the Pi deploy rewrites this to localhost:5432
-  dsn: "postgresql://ispindel:ispindel@localhost:5433/ispindel"
+  # Only used by a run without containers (PostgreSQL on localhost).
+  dsn: "postgresql://ispindel:ispindel@localhost:5432/ispindel"
 
 mqtt:
-  # The broker runs **on the Raspberry Pi** and that is where the iSpindel publishes. A
-  # laptop cannot receive the iSpindel data on its own, so development subscribes to the
-  # Pi's broker and stores into the LOCAL database (database.dsn above) - the Pi's own
-  # ingest keeps writing to the Pi's database, so the two never mix.
-  #   the Pi sits on the iot-ZHAW Wi-Fi (same network as the iSpindel), the laptop on
-  #   ZHAW; both resolve the Pi's stable ZHAW DNS name (README 1.2 / 1.8 / 2.1).
-  #
-  # For hardware-free tests (README 1.5) point a *separate* config at a local broker
-  # (tools/run_broker.sh) via ISPINDEL_CONFIG. Never run tools/fake_spindel.py while this
-  # host points at the Pi: it publishes to the same broker and the fake values would land
-  # in the Pi's database.
-  #
-  #   final setup on the Pi  -> "localhost" (broker and ingest on the same host)
-  host: "clt-lab-n-1298.zhaw.ch"
+  host: "localhost"
   port: 1883
-  # MQTT client id. It must differ from the Pi's ingest, otherwise mosquitto kicks the
-  # other client off the broker whenever this one connects (both subscribe to the same
-  # broker). deploy/pi_setup.sh / pi_update.sh rewrite it to "ispindel-ingest" on the Pi.
-  client_id: "ispindel-ingest-laptop"
-  topic_prefix: "ispindel"   # topics are <prefix>/<device name>/<field>
-  username: null             # null = anonymous (LAN test broker)
+  client_id: "ispindel-ingest"   # must be unique per broker, or two clients kick each other off
+  topic_prefix: "ispindel"       # topics are <prefix>/<device name>/<field>
+  username: null                 # null = anonymous (deploy/mosquitto.conf)
   password: null
-  keepalive_seconds: 120     # MQTT ping interval; a starved network thread must not
-                             # let mosquitto drop the subscription (it kicks at 1.5x)
+  keepalive_seconds: 120
 
 ingest:
-  burst_seconds: 10          # fallback: max wait for the remaining messages of one transmission
-  gravity_unit: "P"          # unit of the device's calibration polynomial: "P" or "SG".
-                             # The stock polynomial (-0.00031*tilt^2+0.557*tilt-14.054) returns
-                             # degrees Plato. Use "SG" only if you calibrated against SG values.
-  log_messages: true         # print every received topic - useful while testing the hardware
+  burst_seconds: 10              # fallback: max wait for the missing messages of a transmission
+  gravity_unit: "P"              # unit of the calibration polynomial: "P" (Plato) or "SG"
+  log_messages: true             # print every received topic - useful while testing hardware
 
 dashboard:
   host: "0.0.0.0"
   port: 8080
-  refresh_ms: 15000          # FR-14: chart refresh, must stay below 60000
-  live_ms: 1000              # countdown: re-read the latest timestamps + tick the display
-  battery_warn_v: 3.5        # FR-19: warning below this voltage
-  battery_full_v: 4.2        # 100 % on the battery gauge (one 18650 Li-Ion cell)
-  battery_empty_v: 3.3       # 0 % on the battery gauge
-  device_chart_days: 14      # history window of the per-iSpindel "Gärdiagramm"
-  # FR-20: the reference values of the batch card. `expected_attenuation` turns an experiment's OG
-  # into "Target FG = og * (1 - 0.80)" and, with the same rule of thumb, into "Est. Final ABV".
-  expected_attenuation: 80
-  # Target temperature window in °C per beer style - matched case-insensitively inside the
-  # experiment's `beer_style`, otherwise `default`. The card marks a deviation as ▲ High / ▼ Low.
-  target_temp_c:
+  refresh_ms: 15000              # FR-14: chart refresh, must stay below 60000
+  live_ms: 1000                  # countdown: re-read the latest timestamps + tick the display
+  battery_warn_v: 3.5            # FR-19: warning below this voltage
+  battery_full_v: 4.2            # 100 % on the battery gauge (one 18650 Li-Ion cell)
+  battery_empty_v: 3.3           # 0 % on the battery gauge
+  device_chart_days: 14          # history window of the per-iSpindel fermentation chart
+  expected_attenuation: 80       # FR-20: target FG = og * (1 - 0.80), and the ABV estimate
+  target_temp_c:                 # FR-20: target window per beer style (substring match), else default
     default: [18.0, 22.0]
     ipa: [19.0, 21.0]
     pale: [18.0, 22.0]
@@ -66,4 +40,4 @@ dashboard:
     hefeweizen: [18.0, 22.0]
     lager: [9.0, 13.0]
     bock: [10.0, 14.0]
-  timezone: "Europe/Zurich"  # NFR-09: stored in UTC, displayed in local time
+  timezone: "Europe/Zurich"      # NFR-09: stored in UTC, displayed in local time

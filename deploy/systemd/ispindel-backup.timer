@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly iSpindel database backup (NFR-04)
+
+[Timer]
+# 03:30 local time; Persistent=true catches up a run missed because the Pi was off.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=ispindel-backup.service
+
+[Install]
+WantedBy=timers.target

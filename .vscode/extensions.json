@@ -1,14 +1,14 @@
 {
-  // Tailwind class names live in Python string literals and in app/assets/input.pcss;
+  // Tailwind class names live in Python string literals and in assets/input.pcss;
   // the extension is what gives completions, hover previews and linting for them.
   // The matching workspace settings are in .vscode/settings.json and the build/watch
   // tasks in .vscode/tasks.json.
   //
   // Remember the two-reader rule: the **compiler** (npm run css / npm run watch) finds
-  // class names by scanning the raw text of app/**/*.py, while the **plugin** only reads
+  // class names by scanning the raw text of main.py / components/*.py, while the **plugin** only reads
   // the shapes named in tailwindCSS.experimental.classRegex. That is why every class
   // string in this repository is written out in full inside a `className`/`extra`
-  // argument - see the module docstring of app/components/ui.py.
+  // argument - see the module docstring of components/ui.py.
   "recommendations": [
     "bradlc.vscode-tailwindcss"
   ]

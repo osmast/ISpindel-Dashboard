@@ -1,0 +1,134 @@
+/* Tailwind source file. Build: npm run css (or npm run watch on macOS/Linux).
+ * The extension is .pcss on purpose: Dash links every .css file under assets/ automatically,
+ * and this file must never be served as a stylesheet.
+ */
+/* `source(none)` switches automatic source detection off: only classes named in the files listed
+ * by `@source` below are compiled, not class names that merely appear in a README or a comment.
+ * NB: this stylesheet counts as a source itself, so do not name classes in the comments here. */
+@import "tailwindcss" source(none);
+
+/* Loaded from the CSS entry point (Tailwind v4 has no tailwind.config.js). Adds the experimental
+ * corner-shape utilities used on every rounded surface; a browser without support ignores it. */
+@plugin "@toolwind/corner-shape";
+
+/* Where the class names live (Dash builds the DOM in Python) - the UI files only, not tools/. */
+@source "../main.py";
+@source "../components/*.py";
+
+/* "The Ultimate Oldschool PC Font Pack v2.2" by VileR (int10h.org), CC BY-SA 4.0 - license text
+ * next to the files. The .woff web variants: 1em equals the font's original pixel height. */
+@font-face {
+  font-family: "IBM XGA-AI 7x15";
+  src: url("fonts/Web437_IBM_XGA-AI_7x15.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM XGA-AI 12x20";
+  src: url("fonts/Web437_IBM_XGA-AI_12x20.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM XGA-AI 12x23";
+  src: url("fonts/Web437_IBM_XGA-AI_12x23.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM XGA-AI 12x20 Plus";
+  src: url("fonts/WebPlus_IBM_XGA-AI_12x20.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Tailwind theme additions (v4 generates a utility from each entry).
+ *
+ * fade-in: panels fade in when they appear - on the first page render and whenever a new
+ * iSpindel card shows up. dash-renderer gives a component a React key of its `id`
+ * (createContainer), so a refresh that re-renders the same card reuses the DOM node and the
+ * animation does NOT replay every refresh - only a genuinely new element animates.
+ * `motion-reduce:animate-none` (used together with the class) switches it off for users who
+ * asked for reduced motion. */
+@theme {
+  --animate-fade-in: fade-in 0.45s ease-out both;
+
+  /* The page font: the IBM XGA-AI face registered by the @font-face rules above. */
+  --font-sans: "IBM XGA-AI 12x20", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Brand colours: the yellow page canvas and the blue used for the card outlines. */
+  --color-page: #FFDD00;
+  --color-brand: #0057B7;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* FR-13: the device cards are native <details> accordions, so the browser toggles them instantly.
+ * Opening/closing is animated here: the content box grows to its natural height and fades in.
+ * An engine without `::details-content` / `interpolate-size` support just opens instantly. */
+
+:root {
+  interpolate-size: allow-keywords;
+}
+
+details[data-card] {
+  --accordion-transition-duration: 0.5s;
+}
+
+details[data-card]::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow-y: clip;
+  transition: block-size var(--accordion-transition-duration) ease,
+              opacity var(--accordion-transition-duration) ease,
+              content-visibility var(--accordion-transition-duration) allow-discrete;
+}
+
+details[data-card][open]::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+
+/* the same courtesy as `motion-reduce:animate-none` on the panels: no movement for users who
+ * asked for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  details[data-card]::details-content {
+    transition: none;
+  }
+}
+
+/* FR-01 / FR-04: the start/end notice is a toast in the top-right corner - it slides in, stays
+ * readable for 10 s and fades out. Plain CSS on purpose (not a Tailwind utility). */
+@keyframes toast-life {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  4% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.toast-life {
+  animation: toast-life 10s ease-out forwards;
+}

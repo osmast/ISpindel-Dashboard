@@ -1,6 +1,5 @@
-"""Simulates an iSpindel: publishes exactly the same 7 topics as the real firmware.
+"""Simulates an iSpindel: publishes the same 7 topics as the real firmware (no hardware needed).
 
-Use it to test ingest + dashboard without hardware:
     python tools/fake_spindel.py --interval 5 --count 10
 """
 import argparse
@@ -14,6 +13,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = yaml.safe_load(Path(os.environ.get("ISPINDEL_CONFIG", ROOT / "config.yml")).read_text())
+# like the ingest: ISPINDEL_MQTT_HOST is the only override (compose sets it to `broker`)
+MQTT = CFG["mqtt"]
+MQTT["host"] = os.environ.get("ISPINDEL_MQTT_HOST", MQTT["host"])
 
 
 def sg_from_plato(plato):
@@ -29,7 +31,7 @@ def main():
     args = parser.parse_args()
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="fake-spindel")
-    client.connect(CFG["mqtt"]["host"], CFG["mqtt"]["port"])
+    client.connect(MQTT["host"], MQTT["port"])
     client.loop_start()
 
     i = 0

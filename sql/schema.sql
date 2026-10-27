@@ -1,6 +1,5 @@
--- iSpindel fermentation monitor - PostgreSQL schema (tested on PostgreSQL 16).
--- Apply once on an empty database:
---   psql "postgresql://ispindel:ispindel@localhost:5435/ispindel" -f sql/schema.sql
+-- iSpindel fermentation monitor - PostgreSQL schema (PostgreSQL 16). Applied automatically by
+-- the db container on the first start; for an existing database use sql/migrations/.
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;   -- required by the exclusion constraint below
 
@@ -92,7 +91,6 @@ LEFT JOIN measurement m ON m.experiment_id = e.id
 GROUP BY e.id, d.mqtt_name
 ORDER BY e.started_at DESC;
 
--- Migration for a database that already exists (a view can replace itself as long as the
--- existing columns keep their names and positions - new columns must be appended):
---   CREATE OR REPLACE VIEW v_experiment_overview AS <the definition above>;
+-- For an existing database a view can replace itself only as long as existing columns keep their
+-- names and positions - new columns must be appended (see sql/migrations/).
 

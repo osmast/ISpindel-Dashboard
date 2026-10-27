@@ -1,0 +1,21 @@
+[Unit]
+# NFR-03: the boot step - after a reboot the stack comes back without manual intervention.
+# Install (README): sudo cp deploy/systemd/ispindel.service /etc/systemd/system/ &&
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ispindel
+# Docker does not need this (its daemon restores the containers); with Podman there is no daemon,
+# so this unit is the boot mechanism.
+Description=iSpindel fermentation monitor (database, broker, ingest, dashboard)
+Documentation=file:/srv/ispindel/README.md
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/ispindel
+ExecStart=/usr/bin/podman compose up -d --remove-orphans
+ExecStop=/usr/bin/podman compose down
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

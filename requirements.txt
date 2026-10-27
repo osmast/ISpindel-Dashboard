@@ -1,0 +1,13 @@
+# Runtime dependencies of the system (what the container image installs).
+#
+# This is the pip equivalent of the "pip:" section of environment.yml. Use whichever fits the
+# machine: requirements.txt (any Python 3.12 on any OS) or `conda env create -f environment.yml`.
+# The container image installs exactly this file, so the pinned set and the image cannot drift.
+dash>=3.0                        # web dashboard (Flask + React underneath)
+dash-mantine-components>=2.8     # dmc.Grid for the card layout
+dash-iconify>=0.1                # pencil / trash / chart / download icons of the tables
+plotly>=6.0                      # dials and fermentation charts
+paho-mqtt>=2.1                   # MQTT client of the ingest service
+psycopg[binary]>=3.2             # PostgreSQL driver (dashboard + ingest)
+PyYAML>=6.0                      # reads config.yml
+gunicorn>=22.0                   # production server for the dashboard

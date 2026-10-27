@@ -1,16 +1,6 @@
-"""Browser-less test of the FR-19 indication of the device card (Should requirement).
-
-`device_card()` is rendered for the four states a device can be in and the component tree is
-checked against the rules the requirement implies:
-
-  * **healthy** (fresh measurement, battery above the threshold) -> one green dot, no text,
-  * **stale** (no measurement for more than three intervals)     -> red dot + one line of text,
-  * **low battery** (below `dashboard.battery_warn_v`)            -> red dot + one line of text,
-  * **never reported** (no measurement at all)                   -> red dot + one line of text.
-
-For every state it is asserted that the dot sits in the `<summary>` (so it is visible while the
-card is collapsed *and* expanded), that the explanation is **text in the expanded half only**,
-and that the old red "no data" badge is gone. No database and no browser are involved.
+"""Browser-less test of the FR-19 status indication (Should requirement): `device_card()` is
+rendered for the four device states (healthy, stale, low battery, never reported) and the tree is
+checked for the green/red dot and the explanation text in the expanded half only. No database.
 
 Run:  python tools/fr19_test.py
 """
@@ -19,7 +9,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main                                                        # noqa: E402
 
 WARN_V = main.BATTERY_WARN

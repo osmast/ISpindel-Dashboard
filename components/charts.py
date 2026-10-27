@@ -3,40 +3,20 @@ import plotly.graph_objects as go
 
 PALETTE = ["#0ea5e9", "#f97316", "#22c55e", "#a855f7", "#ef4444", "#14b8a6"]
 
-# The dashboard's font, registered as a @font-face in app/assets/input.pcss and set as the page
-# default there (`--font-sans`, which Preflight applies to <html>). Plotly draws its own SVG text,
-# so it does **not** inherit the page font - every figure has to name the family itself
-# (main.py feeds the same name to the Mantine theme as well, because
-# Mantine's own `body, :host { font-family: var(--mantine-font-family) }` wins over the page rule.
-# The names with spaces are quoted so the CSS parser reads one family, not three identifiers.
-# Keep this stack in sync with `--font-sans` in app/assets/input.pcss.
+# Plotly draws its own SVG text and does not inherit the page font, so every figure names the
+# family itself. Keep this stack in sync with `--font-sans` in assets/input.pcss.
 FONT_FAMILY = '"IBM XGA-AI 12x20", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace'
 
 
 def fermentation_figure(series, relative=False, height=460, legend=True, mobile=False,
                         x_range=None):
-    """Gravity and temperature over time, on ONE y axis.
+    """Gravity and temperature over time, on one y axis.
 
-    series = [{"label": str,
-               "points": [{"recorded_at": datetime, "gravity_plato": float, "temp_c": float}]}]
-    relative=True switches the x axis to hours since the start of each experiment (FR-18).
-    height=None autosizes the figure to its container (the compact per-device chart does
-    that, so the card can set the height with CSS). legend=False hides the legend - the
-    per-device card already names the device in its title, so it is just wasted space.
-    mobile=True (a phone-sized viewport, see the `viewport` store in main.py) also drops the
-    legend and shortens the axis titles to "time" / "hours" (NFR-06).
-    x_range = (start, end) datetimes (FR-16): pins the x axis to the selected time range instead
-    of letting Plotly autoscale to the data. An experiment that started inside the window then
-    keeps the empty time in front of its first measurement visible - with "last 7 days" and an
-    experiment that has been running for three days, the four days before it stay drawn. The
-    range comes from `main.chart_window()` (the database clock, i.e. the same `now()` the
-    time-range query compares against). It is ignored while `relative` is True: that axis counts
-    hours since the start and therefore has to begin at 0.
-
-    There is deliberately **no second y axis**: gravity and temperature share one scale, so
-    the ticks and labels sit on the left only and the whole right-hand side stays plot area.
-    The temperature trace is dotted and slightly transparent to keep the two lines apart, and
-    the axis title carries both units.
+    series = [{"label": str, "points": [{"recorded_at", "gravity_plato", "temp_c"}]}].
+    relative=True counts hours since the start of each experiment (FR-18). height=None autosizes
+    to the container. `legend`/`mobile` hide the legend; mobile also shortens the axis titles
+    (NFR-06). x_range = (start, end) pins the x axis to the selected time range (FR-16) so the
+    empty time before an experiment's first measurement stays visible; ignored when `relative`.
     """
     if mobile:
         legend = False
@@ -55,9 +35,7 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
             x = [(p["recorded_at"] - t0).total_seconds() / 3600 for p in points]
         else:
             x = [p["recorded_at"] for p in points]
-        # A long series (the 7-day simulation at 15 min = 673 points) would draw 673 overlapping
-        # markers and turn the line into a fat band, so a dense chart looks nothing like a short
-        # one. Markers are only drawn while they stay readable; the line is always there.
+        # markers turn a dense series into a fat band - draw them only while they stay readable
         markers = len(points) <= 200
         fig.add_trace(go.Scatter(
             x=x, y=[p["gravity_plato"] for p in points], name=f"{s['label']} (°P)",
@@ -89,9 +67,7 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    # the spike snaps to the data point, so the hovered measurement is marked on the x axis.
-    # FR-16: no x_range (the "entire experiment" default) means `range=None`, which is Plotly's
-    # autoscale - the axis then spans exactly the experiment's own run time.
+    # the spike marks the hovered point on the x axis; range=None means Plotly autoscale (FR-16)
     fig.update_xaxes(title_text=xaxis_title, automargin=True,
                      showspikes=True, spikemode="across", spikesnap="data",
                      spikethickness=1.5, spikecolor="#0f172a", spikedash="solid",

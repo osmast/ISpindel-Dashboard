@@ -1,30 +1,15 @@
 """Self-test of the requirements that need no hardware (part of the acceptance test).
 
-Run from the repository root, inside the "beer" environment:
-
-    python tools/check_requirements.py
-
-It talks to the database from config.yml (and to nothing else), so an ingest or a dashboard
-running in parallel is fine. Everything it creates is named ``zz_validation*`` and deleted
-again before it exits - the script exits non-zero if any check fails.
-
-Covered: FR-01 (optional fields, required-fields-only, invalid OG), FR-02 (duplicate name),
-FR-03 (iSpindel already in use), FR-04 (end stops the assignment), FR-05 (table columns),
-FR-10 (unassigned rows), FR-11 (no duplicate rows), FR-13 (latest values + time of the last
-measurement on the card, the three data zones), FR-15 (one card per device), FR-16 (time range
-filters chart and export), FR-20 (attenuation, ABV, target FG, 24 h rate, temperature target),
-FR-21/FR-22 (CSV structure and selection), NFR-05 (export feedback), NFR-06 (zone layout),
-NFR-09 (UTC storage / local display).
-
-Not covered here (needs the Pi, the real device or a person): FR-06, FR-07 with real
-iSpindels, the 1 min / 30 min interval test, NFR-01 - NFR-04, NFR-06 - NFR-08, FR-20.
-See memory-bank/acceptance-tests.md for those.
+Run from the repository root or inside the dashboard container:  ./run.sh test
+It talks to the database from config.yml only. Everything it creates is named ``zz_validation*``
+and deleted again before it exits; the script exits non-zero if any check fails.
 """
 import json
 import sys
+from datetime import timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main                                                        # noqa: E402
 
 ok = True
@@ -51,6 +36,13 @@ COUNT_EXP = """SELECT count(*) AS n FROM measurement m
 COUNT_EXP_24H = """SELECT count(*) AS n FROM measurement m
                    WHERE m.experiment_id = %(id)s AND m.gravity_plato IS NOT NULL
                      AND m.recorded_at >= now() - interval '24 hours'"""
+# the counterpart: everything the "24 h" range has to hide. On a fresh database that is only the
+# synthetic row this script inserts, but on the production database the first experiment may
+# already carry older real measurements - the difference all - 24h is then larger than 1, which is
+# correct behaviour and must not be reported as a failure.
+COUNT_EXP_OUTSIDE_24H = """SELECT count(*) AS n FROM measurement m
+                           WHERE m.experiment_id = %(id)s AND m.gravity_plato IS NOT NULL
+                             AND m.recorded_at < now() - interval '24 hours'"""
 
 
 # start from a clean slate so a re-run behaves like the first one. Only rows this script
@@ -142,9 +134,36 @@ else:
 # The chart is checked on the first experiment in the database. The temporary row three days
 # back hangs off the zz_validation *device*, so the cleanup can find it by device - a heuristic
 # like "the newest row older than 2 days" would hit the simulation instead.
-exp_id = main.query("SELECT id FROM experiment ORDER BY id LIMIT 1")[0]["id"]
 main.execute("INSERT INTO device (mqtt_name) VALUES ('zz_validation') ON CONFLICT DO NOTHING")
 dev1 = main.query("SELECT id FROM device WHERE mqtt_name = 'zz_validation'")[0]["id"]
+# Which experiment? The one with the **newest measurement**, so that the "24 h" range really has
+# data to show. The first experiment of the database is not a good pick: with the simulated fleet
+# (tools/simulate.py --demo) or any older installation the oldest batch has nothing inside the last
+# 24 h, and a check may not depend on which data happens to be there.
+newest_exp = main.query("""SELECT m.experiment_id AS id
+                           FROM measurement m
+                           WHERE m.experiment_id IS NOT NULL
+                           ORDER BY m.recorded_at DESC LIMIT 1""")
+first_exp = main.query("SELECT id FROM experiment ORDER BY id LIMIT 1")
+if newest_exp:
+    exp_id = newest_exp[0]["id"]
+elif first_exp:
+    exp_id = first_exp[0]["id"]
+else:
+    print("INFO  no experiment in the database - FR-16/FR-18 run on a temporary zz_validation one")
+    # Ended on purpose: an experiment that is still running would be picked up by the FR-20 zone
+    # checks as "the newest running batch", and these are not real measurements.
+    main.execute("""INSERT INTO experiment (name, device_id, started_at, ended_at, beer_style)
+                    VALUES ('zz_validation_range', %(d)s, now() - interval '10 days',
+                            now() - interval '9 days', 'West Coast IPA')""", {"d": dev1})
+    exp_id = main.query("SELECT id FROM experiment WHERE name = 'zz_validation_range'")[0]["id"]
+    # One row inside the 24 h window: without it the "24 h" figure has no series at all (and the
+    # checks below read `.data[0]`). The 3-day-old row of the next INSERT is the one that "24 h"
+    # has to hide.
+    main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, tilt_deg, temp_c,
+                                            gravity_plato, battery_v, interval_s, rssi_dbm)
+                    VALUES (%(d)s, %(e)s, now() - interval '5 minutes', 62, 20, 14, 4.0, 30, -60)""",
+                 {"d": dev1, "e": exp_id})
 # one temporary row three days back, so that "24h" must exclude it and "all" must include it
 main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, tilt_deg, temp_c,
                                         gravity_plato, battery_v, interval_s, rssi_dbm)
@@ -152,14 +171,31 @@ main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, 
              (dev1, exp_id))
 fig_all = main.update_chart(0, [exp_id], "abs", "all", {})
 fig_24h = main.update_chart(0, [exp_id], "abs", "24h", {})
-db_all = stable_count(lambda: len(fig_all.data[0].y), COUNT_EXP, {"id": exp_id})
-db_24h = stable_count(lambda: len(fig_24h.data[0].y), COUNT_EXP_24H, {"id": exp_id})
+
+
+def chart_points(fig):
+    """Points of the chart's first series - **0** when the selected range has no measurement.
+
+    A figure without a data series is a legitimate answer (a range that excludes everything), so
+    reading `.data[0]` directly would report correct behaviour as a crash. That happened as soon
+    as the oldest experiment of a database was picked for this check - the simulated fleet has
+    batches that ended weeks ago.
+    """
+    return len(fig.data[0].y) if fig.data else 0
+
+
+db_all = stable_count(lambda: chart_points(fig_all), COUNT_EXP, {"id": exp_id})
+db_24h = stable_count(lambda: chart_points(fig_24h), COUNT_EXP_24H, {"id": exp_id})
 check("FR-16 range=all matches the database", db_all[0] <= db_all[1] <= db_all[2],
       f"{db_all[0]} <= chart {db_all[1]} <= {db_all[2]}")
 check("FR-16 range=24h matches the database", db_24h[0] <= db_24h[1] <= db_24h[2],
       f"{db_24h[0]} <= chart {db_24h[1]} <= {db_24h[2]}")
-check("FR-16 range really narrows the chart", len(fig_all.data[0].y) - len(fig_24h.data[0].y) == 1,
-      f"all={len(fig_all.data[0].y)} 24h={len(fig_24h.data[0].y)} (the synthetic 3-day-old row)")
+db_outside = stable_count(lambda: chart_points(fig_all) - chart_points(fig_24h),
+                          COUNT_EXP_OUTSIDE_24H, {"id": exp_id})
+check("FR-16 range really narrows the chart",
+      db_outside[0] <= db_outside[1] <= db_outside[2] and db_outside[1] >= 1,
+      f"all={chart_points(fig_all)} 24h={chart_points(fig_24h)} -> "
+      f"{db_outside[1]} row(s) outside the window (incl. the synthetic 3-day-old one)")
 
 # FR-16: a selected range also pins the x axis to its **whole** window, so the empty time before
 # an experiment's first measurement is drawn instead of cropped away. The case that asked for
@@ -218,9 +254,13 @@ if batch_row:
     check("FR-13/FR-20 the card carries the three data zones",
           all(label in card_dump for label in ("Gravity", "Temperature", "Attenuation & ABV")),
           f"batch={row['batch']}")
-    check("FR-13/FR-20 the card names the batch, its beer style and the batch state",
-          row["batch"] in card_dump and row["beer_style"] in card_dump and "active" in card_dump,
-          f"{row['batch']} / {row['beer_style']}")
+    # FR-04/FR-13: the header of a card whose device runs an experiment carries the **batch name**,
+    # so the dashboard answers "which beer is this iSpindel in" without opening the card. The beer
+    # style and an explicit "active" label are deliberately *not* on the card (the FR-05 table has
+    # the style column, and the card header is one quiet line per device) - a check may only demand
+    # what the requirement asks for, not what an earlier version of the UI happened to render.
+    check("FR-04/FR-13 the card header names the running batch",
+          row["batch"] in card_dump, f"expected {row['batch']!r} on the card")
     check("FR-20 the card shows the OG and the derived target FG",
           f"(OG {main.value_text(og, ' °P')})" in card_dump
           and f"Target FG: ~{main.value_text(target, ' °P')}" in card_dump,
@@ -388,10 +428,16 @@ check("the FR-05 panel carries no repeated heading",
       "Experiments (FR-05)" not in json.dumps(main.app.layout.to_plotly_json(), default=str))
 
 # ---- FR-21 / FR-22 / NFR-05: export ------------------------------------------
+# A range without a single measurement is a valid answer, not an error: download_csv then returns
+# no_update plus the amber "no measurements in the selected range" notice. Treating that as a crash
+# was the same mistake as reading `.data[0]` of an empty figure - so the CSV checks tolerate it.
 data, alert = main.download_csv([exp_id], "all")
-csv_all = data["content"].splitlines()
-data24, _ = main.download_csv([exp_id], "24h")
-csv_24h = data24["content"].splitlines()
+csv_all = data["content"].splitlines() if data is not main.dash.no_update else []
+data24, alert_24h = main.download_csv([exp_id], "24h")
+csv_24h = data24["content"].splitlines() if data24 is not main.dash.no_update else []
+check("FR-21/FR-22 an empty range exports no file but says why",
+      bool(csv_24h) or "no measurements in the selected range" in str(alert_24h),
+      str(alert_24h)[:70])
 check("FR-21 CSV header correct",
       csv_all[0].startswith("experiment,ispindel,timestamp_utc,timestamp_local,tilt_deg,"
                             "temperature_c,gravity_plato,battery_v,interval_s,rssi_dbm"),
@@ -406,14 +452,33 @@ check("NFR-05 export feedback", "exported" in str(alert), str(alert)[:70])
 no_sel, alert2 = main.download_csv([], "all")
 check("NFR-05 no silent no-op without a selection", "pick at least one" in str(alert2),
       str(alert2)[:60])
-tz_row = main.query("""SELECT to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS utc,
+tz_row = main.query("""SELECT recorded_at,
+                              to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') AS utc,
                               to_char(recorded_at AT TIME ZONE 'Europe/Zurich', 'YYYY-MM-DD HH24:MI')
                                   AS loc
                        FROM measurement ORDER BY id LIMIT 1""")[0]
-check("NFR-09 stored UTC, displayed Europe/Zurich (+2 h CEST)",
-      abs(int(tz_row["loc"][-5:-3]) - int(tz_row["utc"][-5:-3])) == 2, str(tz_row))
+# NFR-09: the stored value is UTC and the display is the local time of Europe/Zurich - so the
+# expected offset is the one the zone really has at that timestamp (+2 h CEST in summer, +1 h CET in
+# winter). Hard-coding "+2 h CEST" made this check fail from the DST change onward even though
+# nothing was wrong; it now compares the SQL conversion with the one the dashboard performs.
+local_ts = main.local(tz_row["recorded_at"])
+utc_ts = tz_row["recorded_at"].astimezone(timezone.utc)
+check("NFR-09 stored UTC, displayed in the local time of Europe/Zurich",
+      tz_row["utc"] == utc_ts.strftime("%Y-%m-%d %H:%M")
+      and tz_row["loc"] == local_ts.strftime("%Y-%m-%d %H:%M"),
+      f"{tz_row['utc']} UTC -> {tz_row['loc']} local (offset {local_ts.utcoffset()})")
 
 # ---- FR-10 / FR-11 / FR-09 evidence on the live data -------------------------
+# FR-10 (measurements without an experiment are kept, not dropped) needs at least one unassigned
+# row to look at. A freshly installed system has none until the first transmission arrives without
+# a running experiment, so the check creates its own and says so - it still proves that an
+# unassigned measurement survives the query that the dashboard runs.
+if not main.query("SELECT 1 FROM measurement WHERE experiment_id IS NULL LIMIT 1"):
+    print("INFO  no unassigned measurement yet - FR-10 is shown on a synthetic row")
+    main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, tilt_deg, temp_c,
+                                            gravity_plato, battery_v, interval_s, rssi_dbm)
+                    VALUES (%(d)s, NULL, now() - interval '2 minutes', 62, 20, 14, 4.0, 30, -60)""",
+                 {"d": dev1})
 stats = main.query("""SELECT
         (SELECT count(*) FROM measurement) AS rows,
         (SELECT count(*) FROM measurement WHERE experiment_id IS NULL) AS unassigned,

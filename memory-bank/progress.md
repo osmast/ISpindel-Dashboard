@@ -3,6 +3,13 @@
 _Status checked on 20.10.2026 against the requirement specification (see
 `requirements-traceability.md` for the per-requirement evidence)._
 
+## Repository simplification (27.10.2026, eleventh session)
+
+Dev-only tooling and dotfiles removed, `compose.dev.yaml` merged into `compose.yaml`, comments and
+docstrings cut back across the code and the configs, `README.md` rewritten (348 -> 182 lines).
+After the change: `./run.sh test` = 134 PASS / 0 FAIL / 0 SKIP, dashboard / `_dash-layout` /
+`tailwind.css` answer 200. Removal list in `activeContext.md`.
+
 ## Summary
 
 | Area | Status |
@@ -11,14 +18,24 @@ _Status checked on 20.10.2026 against the requirement specification (see
 | Experiment management (FR-01 - FR-05) | **all 5 Must MET** - optional fields added and verified live |
 | Dashboard (FR-13 - FR-20) | 4 of 5 Must MET (FR-13/14/16/17); FR-15 waits for the other iSpindels |
 | Export (FR-21) | **MET** + the column structure is documented; FR-22 MET as well |
-| Non-functional (NFR-01 - NFR-09) | **NFR-01 - NFR-04 MET on the Pi** (deployment, host name, power cycles, no data loss); NFR-07 measured (1.31 s); NFR-09 verified for UTC/local, DST still open |
+| Non-functional (NFR-01 - NFR-09) | **NFR-01 - NFR-04 MET on the Pi** (deployment, host name, power cycles, no data loss) - now re-established by the container stack **locally** (four containers on one host, volume survives `down`/`up`, boot unit shipped); NFR-07 measured (1.31 s); NFR-09 verified for UTC/local incl. the DST change (the checker no longer hard-codes CEST) |
 | Should: FR-06 (edit half done, events open), NFR-06 | open; FR-10, FR-18, FR-19, FR-22, NFR-07 met |
 | Could: FR-20 | **MET** (20.10.2026, eighth session): the batch zones show attenuation, ABV, the target FG, the 24 h rate and the temperature target |
 | Deliverables | D1 draft (`docs/concept.md`), **D2 running on the Pi with real data**, D3 complete but uncommitted, D4 to prepare |
+| Packaging (27.10.2026) | **deployable artefact**: `compose.yaml` + `Dockerfile` + `run.sh` run the whole system on any machine (`./run.sh up`), `deploy/systemd/` gives the Pi its boot step and its nightly backup, `scripts/publish.sh` exports the code-only tree |
 
 Count: **31 requirements - 22 Must (19 proven, 3 left: FR-15, NFR-05, NFR-08), 8 Should (5 met,
 1 open, 2 pending), 1 Could (met).** See `requirements-traceability.md` for the line-by-line
 scoreboard and the "Deployment record" section for the state of the Pi.
+
+**Verification after the container migration (27.10.2026, macOS + Podman 6.1.4):** the stack was
+built and started from a clean repository state; on an **empty volume** the self-test gives
+117 PASS / 0 FAIL / 2 explained SKIP, with the seeded demo fleet 128 PASS / 0 FAIL / 0 SKIP;
+`./run.sh down` + `./run.sh up` keeps all 5 586 rows (`pgdata` volume, NFR-04); `deploy/backup.sh`
+writes a 140 K `pg_dump -Fc` archive that `pg_restore -l` reads (39 TOC entries); the ingest chain
+works end to end through the containers (3 transmissions from `tools/fake_spindel.py` -> broker ->
+ingest -> exactly 3 rows, `experiment_id NULL`); dashboard/`_dash-layout`/`tailwind.css`/fonts all
+answer 200; `css_check.py` and `tailwind_class_check.py` ALL PASS on the host.
 
 ## What works (verified)
 
@@ -79,7 +96,7 @@ scoreboard and the "Deployment record" section for the state of the Pi.
   pattern-matching callback when a rebuilt grid adds or removes the red end button, and acting on
   that ended an experiment seconds after it was created (0 measurements, nothing to select in the
   chart). The guard the setup button already had now also covers the end button (`main.clicked()`,
-  proven by `ui_test.py`). **Only local so far - the Pi still runs the old code.**
+  proven by `ui_test.py`).
 * **Notices are toasts** (20.10.2026): experiment start/end feedback is a fixed top-right toast
   (`ui.toast()`, `#msg` is `fixed right-0 top-0`, `toast-life` in `input.pcss`) that fades away
   after 10 s - CSS only, no clientside JS.
@@ -153,13 +170,26 @@ scoreboard and the "Deployment record" section for the state of the Pi.
   `secondary_y` - gravity (°P) and temperature (°C) share a single left-hand scale, the ticks
   are on the left only, the temperature trace stays dotted/transparent and the axis title
   carries both units (`gravity (°P) · temperature (°C)`, `°P · °C` on a phone).
-* **`tools/check_requirements.py`** (20.10.2026): 24 machine checks against the live database - all
-  PASS; verifies FR-01, FR-02, FR-03, FR-04, FR-05, FR-09, FR-10, FR-11, FR-15, FR-16, FR-21,
-  FR-22, NFR-05 and NFR-09 without hardware and cleans up after itself.
+* **`tools/check_requirements.py`**: 44 machine checks against the live database - all PASS, plus
+  one SKIP that depends on the data (the FR-20 zones need a device with a running experiment);
+  verifies FR-01, FR-02, FR-03, FR-04, FR-05, FR-09, FR-10, FR-11, FR-12, FR-13, FR-15, FR-16,
+  FR-17, FR-18, FR-19, FR-20, FR-21, FR-22, NFR-05, NFR-06, NFR-09 without hardware and cleans up
+  after itself. `tools/ui_test.py` adds 54 checks for the dialogs and the row actions.
 * **Operations documentation**: `deploy/pi_setup.sh`, mosquitto config, systemd units, backup cron,
   Tailwind build (npm + standalone CLI), full local test instructions (README sections 1-4), plus the
   D1 concept draft in `docs/concept.md` (architecture diagram, automation pyramid, ER diagram,
-  technology choice, assumptions).
+  technology choice, assumptions). Since 21.10.2026 also **README 2.7 "Start, stop and check the app
+  on the Pi"** (systemctl start/stop/restart, journalctl, the three health checks, the deploy
+  sequence, the foreground run and the `pip install` trap of a new `environment.yml` entry).
+* **Redeployed on the Pi (21.10.2026)**: the repository was synced onto the Pi again (it had run the
+  20.10. 11:29 build), `dash-iconify` was installed into the `beer` env, both services restarted -
+  `check_requirements.py` (44 checks + 1 data-dependent SKIP), `ui_test.py` (54) and
+  `fr19_test.py` (4 states x 6 checks) are **ALL PASS**
+  against the production database while `dfp_os_01` keeps writing every 30 s, and the served
+  `tailwind.css` is byte-identical to the committed build. `tools/check_requirements.py` gained the
+  fix for the one check that failed there: FR-16's "range really narrows the chart" compared the
+  narrowing with the database count of rows outside the window instead of assuming its own single
+  synthetic row.
 
 ## What is missing
 
@@ -186,40 +216,54 @@ the batch zones.)
 
 | ID | Status |
 | --- | --- |
-| D1 Concept | **missing** (1-2 pages: architecture + automation pyramid, data model, technology justification, assumptions) |
-| D2 Running system with fermentation-phase data | not yet - system not deployed, no real data |
-| D3 Source code + README + config file | exists, but **nothing is committed to git** and the Moodle HTML export still sits in the repository root |
+| D1 Concept | **draft** (`docs/concept.md`: architecture, data model with a Mermaid ER diagram, technology justification, FR-20 formulas) - polish to 1-2 pages + the two brewmaster questions |
+| D2 Running system with fermentation-phase data | **running on the Pi with real data** - `dfp_os_01` writes every 30 s since 20.10.2026; the newest code was deployed and re-verified 21.10.2026 |
+| D3 Source code + README + config file | complete; one commit `82c5078 Init` exists, the newer work is uncommitted, the Moodle HTML export still sits in the repository root |
 | D4 Presentation (15 min + live demo) | to prepare |
 
-## Known issues / risks
+## Known issues / risks (27.10.2026, after the container migration)
 
-1. **Brew day is 29.10.2026** - 9 days from this status. Every Must gap above must be closed and
-   proven before then; lost fermentation data cannot be recovered (QoS 0, no timestamps in the
-   payload).
-2. **No git commits** - a single bad edit or a lost file endangers the whole deliverable.
-3. **Broker placement**: the dev config points at the ZHAW lab Pi; a public broker has no
-   authentication and the device topic prefix cannot be changed on the device. Whoever publishes
-   as `ispindel/<name>/...` can inject values.
-4. **How other iSpindels reach the dashboard** is the biggest unresolved design question.
-5. **Pi clock**: no NTP -> wrong `recorded_at` everywhere (chrony is part of `pi_setup.sh`).
-6. **`DEV_REPEAT = 6`** must not survive into the acceptance test.
-7. **Tailwind**: new class names require a rebuild of `app/assets/tailwind.css` - `npm run css`
-   (build) or `npm run watch` (dev mode, same minified output), then `python tools/css_check.py`
-   to be sure; on the Pi the standalone CLI has to be downloaded once. Every class string must be
-   written out in full inside a `className`/`extra` argument (no lookup table, no f-string) -
-   `python tools/tailwind_class_check.py` proves it, and the VS Code tasks run both checks.
-8. **NFR-07** is unmeasured; long experiments at a 1-minute test interval (T-03) or several
-   devices at once could make the single-shot chart query slow.
-9. **`config.yml` is committed** and contains the broker host plus a TODO to exclude it once the
-   broker moves to a VPS - decide what the submitted state should be.
-10. **The Pi still runs the code from the second 20.10.2026 session** - every local change since
-    then (auto-end guard, toast, card footer times, blue running outline, class-name rule, the
-    FR-05 panel/row-action and accordion changes of the fifth session, the chart-selection /
-    row-export and the time axis / range move of the sixth session) is **not deployed**.
-    Experiments started there are still ended automatically a few seconds later, and the Pi's
-    `app/assets/tailwind.css` is the older build. Deploy the local fixes (`rsync` +
-    `deploy/pi_update.sh`) before the next test; the Pi's `config.yml` needs no change (the deploy
-    sed keeps it at `localhost:5432`).
+1. **Brew day is 29.10.2026 - two days away.** Lost fermentation data cannot be recovered (QoS 0, no
+   timestamps in the payload), so the running production installation must not be disturbed.
+2. **Everything is still uncommitted**: one commit (`82c5078 Init`) exists, everything after it -
+   including the whole container migration - lives only in the working tree.
+3. **The container stack has not been rolled out on the production Pi yet.** It is built, started and
+   verified locally (macOS, Podman 6.1.4) and the migration recipe is in the README, but the Pi still
+   runs the bare-metal installation with the current fermentation data. Do the switch after the brew
+   day data is dumped (`pg_dump`) - the rollback is `systemctl enable --now`.
+4. **Broker placement / FR-15**: the dev config no longer points at the ZHAW lab Pi, so the laptop
+   sees only its own stack. A public broker has no authentication and the device topic prefix cannot
+   be changed on the device - whoever publishes as `ispindel/<name>/...` can inject values. How the
+   other iSpindels reach this broker is still the biggest open design question (client decision).
+5. **Pi clock**: no NTP -> wrong `recorded_at` everywhere. Containers share the host clock, so the
+   fix stays on the host: `systemd-timesyncd`/`chrony` + `After=time-sync.target` in the unit.
+6. **`DEV_REPEAT = 1`** must stay 1 for the acceptance test (it is 1).
+7. **Tailwind**: `app/assets/tailwind.css` is a build artefact **and** it is baked into the image -
+   after `npm run css` (or `css_check.py --fix`) the stack needs `./run.sh up`, otherwise the container
+   keeps serving the previous CSS. `tools/tailwind_class_check.py` guards the class-name rule.
+8. **NFR-07** was measured at 1310 ms on the old installation; `tools/load_test.py` needs a host-side
+   Python with the dependencies (or `./run.sh shell`).
+9. **`config.yml` is committed and safe**: it carries no machine-specific value (localhost), so the
+   old "exclude it from git before the broker moves to a VPS" TODO is obsolete. Anything secret
+   belongs in an ignored `config.local.yml` (`ISPINDEL_CONFIG`) or in environment variables.
+10. **The old deployment traps are gone**: a new dependency cannot drift away, because the image
+    installs `requirements.txt` at build time (the `dash-iconify` restart-loop of 21.10.2026 is
+    impossible now), and there is no `sed`-rewritten `config.yml` any more - the same file runs on
+    the laptop and on the Pi (the container network passes `db`/`broker` in via env).
+11. **Closed this session - the card content decision**: the batch card keeps no beer-style line and
+    the status pill stays a dot (no word "active"); `status_chip()`'s docstring and the FR-13/FR-20
+    check were brought in line with the UI. FR-13 asks for the latest values + the time of the last
+    measurement, and the card still shows both. This removed the last `FAIL` line of the self-test.
+12. **Fixed this session - two data/date dependent checks**: NFR-09 hard-coded "+2 h CEST" (it failed
+    from the DST change onward although UTC/local handling was correct) and FR-16/FR-10 assumed an
+    experiment with recent rows. The checkers now pick the experiment with the newest measurement,
+    tolerate an empty range/empty figure and say `INFO` when they create their own row. Evidence: on
+    an **empty volume** `./run.sh up && ./run.sh test` gives 117 PASS / 0 FAIL / 2 SKIP, on the demo
+    fleet 128 PASS / 0 FAIL / 0 SKIP, and `ui_test.py` + `fr19_test.py` pass in both.
+13. **Compose-provider quirk** (macOS, `podman compose` -> external `docker-compose` provider):
+    removing containers with `podman rm` behind compose's back leaves stale state and the next `up`
+    fails with "no container with ID or name …". Cure and rule: `./run.sh down && ./run.sh up`, never
+    remove containers by hand.
 
 ## Evolution of decisions
 

@@ -173,6 +173,23 @@ Measured on the Pi that day:
 * data gap during the reboot: the transmissions between 11:14:05 and 11:15:06 are missing
   (QoS 0 without retain, assumption A4) - about one minute of a ~15 min interval
 
+## Deployment record (21.10.2026) - same Pi, newest code
+
+The Pi had still been running the build of **20.10.2026 11:29** (638 lines of `app/main.py`; the
+repository had 1593), so it was missing everything from the later sessions. Synced again and
+verified:
+
+| Item | Value |
+| --- | --- |
+| Repository | `/home/admin/ispindel`, synced with `rsync` (config.yml included, `pi_update.sh` rewrote it) |
+| Backup before the update | `~/ispindel-repo-bak-2026-10-21.tgz` (whole repo) and `~/ispindel/config.yml.bak-2026-10-21` |
+| Python env | added **`dash-iconify` 0.1.2** (`pip install "dash-iconify>=0.1"`) - the Pi's `beer` env predated that `environment.yml` entry, so the dashboard was in a `ModuleNotFoundError` restart loop |
+| config.yml | now carries the FR-20 block (`expected_attenuation`, `target_temp_c`) and `mqtt.client_id`; the two unused `gauge_*` keys are gone (the dials were replaced by the data zones) |
+| Result | `check_requirements.py`, `ui_test.py`, `fr19_test.py` -> **ALL PASS**; dashboard 200 in ~30 ms, `/_dash-layout` + `tailwind.css` + fonts 200, CSS md5 identical to the committed build |
+| Live data | `dfp_os_01` writes every 30 s with `experiment_id = NULL` (no experiment running -> the FR-20 zone checks SKIP) |
+| Checker fix | FR-16 "range really narrows the chart" now compares `all - 24h` with the DB count of rows outside the window instead of assuming exactly one (its own synthetic) row - the old form failed on real data although the range worked |
+| README | new section **2.7 "Start, stop and check the app on the Pi (day-to-day)"** |
+
 Note for the working setup on the Mac: `localhost:5435` is an **SSH tunnel into the Pi's
 PostgreSQL** (`ssh -L 5435:127.0.0.1:5432`) and `localhost:8080` is the **Mac's own dev server**
 reading that database. Both work against the production data, so a `zz_validation*` or load-test
@@ -181,8 +198,10 @@ record created locally also lands on the Pi - `tools/check_requirements.py` and
 
 ## Prioritised action list (Must first)
 
-1. **git init + first commit** of the current state (protects D3 immediately) - still open, and the
-   only remaining action that needs no hardware at all.
+1. ~~**git init + first commit** of the current state (protects D3 immediately)~~ **done** - the
+   repository has one commit (`82c5078 Init`, 20.10.2026) with the whole tree; the working tree
+   carries the newer changes (devices tab, chart row actions, data zones, checker fix) **uncommitted**,
+   so a second commit is the cheapest remaining insurance.
 2. **Pi session** (NFR-01 - NFR-04, the last six unproven Must items): `deploy/pi_setup.sh`,
    systemd units, Tailwind build, then T-03 at 60 s and 1800 s, T-04 stopwatch, T-07 power cycle,
    T-08 LAN access, NFR-05 walk-through by a second person, NFR-06 on a phone.
@@ -197,3 +216,38 @@ record created locally also lands on the Pi - `tools/check_requirements.py` and
    holds the formulas, `tools/check_requirements.py` recomputes them.
 7. **D1** polish (shorten to 1-2 pages, add the two brewmaster questions), **D4** preparation,
    and the leftover `iSpindel Project _ Moodle ZHAW.html` in the repository root.
+
+## Container migration record (27.10.2026)
+
+The system is no longer installed on a host - it is a **compose stack that runs on any machine**.
+This changes the evidence for the deployment requirements (NFR-01 - NFR-04), without changing what
+they demand:
+
+| Requirement | Old evidence (bare metal Pi) | New evidence (containers) | Status |
+| --- | --- | --- | --- |
+| NFR-01 | systemd services + apt PostgreSQL/mosquitto on the Pi | `db`, `broker`, `ingest`, `dashboard` on **one host**; Postgres 16 + mosquitto in containers, the image built from this repository; the broker is the only part that may live elsewhere (NFR-01 explicitly allows it) | MET locally; to repeat on the Pi |
+| NFR-02 | nftables limits 8080 to the campus network | dashboard published on `<host>:8080` (`ISPINDEL_HTTP_PORT`); the database is bound to **127.0.0.1 only**; README states that the dashboard has no authentication and must stay in the LAN (host firewall is the operator's job again) | MET (host name/LAN access still to repeat on the Pi) |
+| NFR-03 | `Restart=always` + `After=network-online.target chrony-wait.service` on two units | `restart: unless-stopped` on every service **plus** `deploy/systemd/ispindel.service` (`podman compose up -d`, `WantedBy=multi-user.target`, `After=network-online.target time-sync.target`) - rootless Podman has no daemon to restore restart policies at boot | implemented + unit shipped; T-07 to repeat on the Pi |
+| NFR-04 | 209 rows before = 209 after a power cycle; cron `pg_dump -Fc`, 14 days | `pgdata` **named volume** on the host disk; measured locally: 5 586 rows before `./run.sh down` = 5 586 after `./run.sh up`; `deploy/backup.sh` (pg_dump -Fc, verifies non-empty, 14 days) + `ispindel-backup.timer` | MET locally; T-07 to repeat on the Pi |
+
+Checks that were fixed on the way (both were failing on correct behaviour, i.e. wrong checks, not
+wrong code):
+
+* **NFR-09**: the check hard-coded "+2 h CEST" and therefore failed from the DST change (25.10.2026)
+  onward. It now compares the SQL conversion (`AT TIME ZONE 'Europe/Zurich'`) with the conversion the
+  dashboard performs (`db.local()`) - correct in CET and in CEST.
+* **FR-16 / FR-10**: the range checks used `SELECT id FROM experiment ORDER BY id LIMIT 1` and read
+  `fig.data[0]`. With the demo fleet (or any older installation) the oldest batch has no measurement
+  in the last 24 h, so the check crashed on a correct result. It now picks the experiment with the
+  newest measurement, tolerates a range/export that contains nothing, and creates its own
+  `zz_validation*` experiment (ended, so the FR-20 zone checks do not mistake it for a real batch)
+  when the database is still empty.
+* **FR-13/FR-20 card content**: the check demanded the beer style and the word "active" on the batch
+  card, both of which the UI deliberately does not render (`app/main.py`, commented-out spans;
+  `status_chip()` = dot only). The check now demands what FR-13 asks for - the latest values and the
+  time of the last measurement, plus the batch name in the header - and `status_chip()`'s docstring
+  matches the implementation.
+
+Result on the fresh container volume: `check_requirements.py`, `ui_test.py` and `fr19_test.py`
+**ALL PASS** (117 PASS / 0 FAIL / 2 SKIP on an empty volume, 128 PASS / 0 FAIL / 0 SKIP with the demo
+fleet).

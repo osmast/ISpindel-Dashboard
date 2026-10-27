@@ -1,0 +1,14 @@
+[Unit]
+# NFR-04: nightly logical backup (deploy/backup.sh, 14 days retention, dumps to
+# ISPINDEL_BACKUP_DIR). Install (README): copy this file and ispindel-backup.timer to
+# /etc/systemd/system/, then `systemctl daemon-reload && systemctl enable --now ispindel-backup.timer`.
+Description=iSpindel database backup (pg_dump, 14 days retention)
+After=ispindel.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/srv/ispindel
+Environment=ISPINDEL_BACKUP_DIR=/var/backups/ispindel
+Environment=ISPINDEL_BACKUP_KEEP_DAYS=14
+ExecStart=/usr/bin/bash /srv/ispindel/deploy/backup.sh

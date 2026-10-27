@@ -1,0 +1,17 @@
+# Build context of the image - keep it free of documents and machine state.
+.git
+.dockerignore
+*.md
+docs/
+memory-bank/
+.vscode/
+.clinerules/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+config.local.yml
+*.log
+compose.yaml
+deploy/backups/

@@ -1,18 +1,14 @@
-"""Browser-less test of the new device-card experiment dialog (FR-01 - FR-04, FR-13).
+"""Browser-less test of the experiment dialog flow (FR-01 - FR-04, FR-13): it renders the overview,
+reads the button ids as the card renders them and posts the same requests the browser sends -
+set up -> create, then end -> confirmation -> ended. Temporary rows (zz_ui*) are removed again.
 
-It renders the overview, reads the button ids **exactly as the card renders them** (that is what
-the browser sends) and posts the same requests to `_dash-update-component`:
-"Set up experiment" -> dialog opens -> "Start experiment" -> created; then "End experiment" ->
-the same dialog opens as a **confirmation** (FR-04) -> "End experiment" -> ended.
-Everything it creates is named zz_ui* and removed again.
-
-Run:  python tools/ui_test.py      (on the Pi, where the database is)
+Run:  python tools/ui_test.py
 """
 import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main                                                        # noqa: E402
 
 ok = True

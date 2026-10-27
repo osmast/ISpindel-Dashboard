@@ -1,16 +1,7 @@
 """Reusable layout primitives. All styling is Tailwind utility classes.
 
-**Every class string is written out in full inside a `className` argument** - no lookup table,
-no f-string, no `"bg-" + tone`. Two readers have to find the names:
-
-* the Tailwind compiler (`@source "../**/*.py"` in app/assets/input.pcss), which scans the raw
-  text of this file, and
-* the VS Code Tailwind plugin, which only looks at the shapes named in
-  `tailwindCSS.experimental.classRegex` in .vscode/settings.json.
-
-A class name that is assembled from a variable is invisible to the plugin (and to a reader);
-the failure is silent - the class is simply missing from app/assets/tailwind.css and the
-element renders unstyled. `python tools/tailwind_class_check.py` guards that rule.
+Every class string is written out in full inside a `className` argument (no lookup table, no
+f-string, no `"bg-" + tone`), because Tailwind compiles from the raw file text.
 """
 from dash import html
 
@@ -53,7 +44,7 @@ def card(title, *children):
                                  "text-slate-500")
     ] if title else []
     return html.Section(
-        # animate-fade-in: the panel fades in when the page renders (see app/assets/input.pcss)
+        # animate-fade-in: the panel fades in when the page renders (see assets/input.pcss)
         className="animate-fade-in motion-reduce:animate-none rounded-xl corner-squircle border "
                   "border-brand bg-white p-4 shadow-sm md:p-5",
         children=[*heading, *children],
@@ -78,12 +69,7 @@ def stat(label, value, unit="", hint=""):
 
 
 def zone(label, *children):
-    """One data zone of the FR-13 batch card: an uppercase caption over the zone's lines.
-
-    The device card carries three of them (gravity / temperature / attenuation & ABV) in a grid
-    that stacks on a phone. They replaced the two Plotly dials on 20.10.2026 - the same numbers,
-    but with the OG, the targets, the 24 h rate and the derived values next to them.
-    """
+    """One data zone of the FR-13 batch card: an uppercase caption over the zone's lines."""
     return html.Div(
         className="rounded-lg corner-squircle border border-slate-200 bg-slate-50 p-3",
         children=[html.Div(label, className="mb-1 text-xs font-semibold uppercase tracking-wide "
@@ -93,8 +79,7 @@ def zone(label, *children):
 
 
 def badge(text, tone="slate"):
-    """A small status pill (FR-05). `tone` picks one of the fixed colour sets, written out
-    in full per branch so Tailwind and the editor both see every literal class name."""
+    """A small status pill (FR-05). `tone` picks one of the fixed colour sets."""
     return html.Span(text, className=(
         "inline-block rounded-full border px-2 py-0.5 text-xs font-medium "
         "bg-slate-100 text-slate-700 border-slate-200" if tone == "slate" else
@@ -124,36 +109,18 @@ def alert(text, tone="slate"):
 
 
 def toast(content, tone="slate"):
-    """A transient notice for the fixed top-right corner (FR-01 / FR-04).
-
-    `content` is either a plain string (wrapped in an `alert`) or an existing alert
-    component. The whole life cycle is CSS: the `toast-life` animation in
-    app/assets/input.pcss fades the notice in, holds it for 10 s and fades it out
-    (`forwards`, so it stays invisible afterwards). No JavaScript is involved - the
-    container in main.py ignores pointer events and the faded node cannot capture a click,
-    and the next notice simply replaces the children.
-    """
+    """A transient notice for the fixed top-right corner (FR-01 / FR-04), faded out by CSS."""
     if not hasattr(content, "to_plotly_json"):        # a plain string -> wrap it in an alert
         content = alert(content, tone)
     return html.Div(content, className="toast-life w-full shadow-lg")
 
 
 def button(id, label, tone="dark", extra="", compact=False, **kwargs):
-    """A button. `extra` appends static Tailwind classes (e.g. `w-full sm:w-auto`, so a button
-    fills the row on a phone); that is the one place where classes come from outside this file,
-    and the call site is where the literal is written. `compact=True` renders the small variant
-    for a card footer: `text-xs` like the surrounding footer line, less padding and a smaller
-    radius. Every size/tone combination is written out in full (see the module docstring), so
-    no class name is ever assembled at runtime.
-    """
+    """A button. `extra` appends static Tailwind classes; `compact=True` is the footer variant."""
     return html.Button(
         label,
         id=id,
-        # size x tone. The default size is min-h-11 = 44 px, the smallest comfortable touch
-        # target (NFR-06); compact is min-h-8 for the card footers. `grey` is the quiet
-        # default action, e.g. the "set up experiment" button of a device card.
-        # NB: no parenthesis may appear inside this className expression - the VS Code
-        # classRegex for the parenthesised shape stops at the first `)`.
+        # size x tone: min-h-11 = 44 px touch target (NFR-06), compact = min-h-8 for card footers.
         className=(
             "min-h-8 rounded-md corner-squircle px-2.5 py-1 text-xs font-medium transition-colors "
             "bg-slate-900 text-white hover:bg-slate-700 " if compact and tone == "dark" else
@@ -180,14 +147,8 @@ def button(id, label, tone="dark", extra="", compact=False, **kwargs):
 
 
 def field(label, control):
-    """A labelled control: caption + control in a grid.
-
-    Deliberately a `<div>`/`<span>` and **not** a `<label>`: `dcc.RadioItems` /
-    `dcc.Checklist` render a `<label>` per option, and a `<label>` inside a `<label>` is
-    invalid HTML. The browser then treats the *first* radio as the outer label's control and
-    clicks it whenever anything inside the label is clicked - which made the "Time range" and
-    "Time axis" selectors snap back to their first option, so the range never applied.
-    """
+    """A labelled control: caption + control, in a `<div>` not a `<label>` (a nested label makes
+    dcc.RadioItems snap back to its first option)."""
     return html.Div(
         className="grid gap-1 text-sm",
         children=[html.Span(label, className="text-slate-600"), control],

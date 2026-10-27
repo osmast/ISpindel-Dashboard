@@ -1,49 +1,14 @@
-"""Seed clearly simulated data - one experiment, or a whole simulated fleet.
+"""Seed clearly simulated data - one experiment, or a whole simulated fleet (``--demo``).
 
-The dashboard is easier to judge (and to demo) with complete fermentations in it, and that does
-not need the hardware to be running. Everything this script writes carries the ``SIM_`` prefix -
-both the iSpindel names and the experiment names - so it is obvious in the UI and easy to remove
-again:
+Everything carries the ``SIM_`` prefix (device and experiment names), so it is obvious in the UI
+and easy to remove again:
 
-    python tools/simulate.py                        # one 7-day experiment, 15 min interval
-    python tools/simulate.py --running              # leave it open (it shows in the Running tab)
-    python tools/simulate.py --days 3 --interval 5 --name SIM_demo
-    python tools/simulate.py --demo                 # the 6-device fleet over four weeks (below)
-    python tools/simulate.py --demo --until-now     # ... but nothing dated after now
-    python tools/simulate.py --delete               # remove every SIM_ experiment and device
+    python tools/simulate.py --demo --until-now    # the 6-device fleet over four weeks
+    python tools/simulate.py                       # one 7-day experiment
+    python tools/simulate.py --delete              # remove every SIM_ experiment and device
 
-The data is **two sine functions and nothing else**, so it is smooth and obviously synthetic -
-it is not a model of a real fermentation:
-
-    gravity(t) = og - drop * (1 - cos(pi*t/duration)) / 2      # HALF a period -> falling S-curve
-    temp(t)    = temp_mid + temp_amp * sin(2*pi*t/24h)         # one cycle per day
-
-The gravity needs **half** a cosine period: a full period returns to where it started, so the
-gravity fell *and rose back to the OG*. That went unnoticed until the batch card showed a
-"Rate: +x °P/24h" on a finished batch (fixed 20.10.2026).
-
-``tilt_deg``, ``battery_v``, ``interval_s`` and ``rssi_dbm`` are filled with plausible values so
-the device card looks complete, and ``gravity_raw`` (SG) plus ``temp_raw``/``temp_unit`` keep the
-raw transmission like the ingest does (FR-08). The timestamps are UTC, like the ingest's
-``recorded_at``, and ``received_at`` equals ``recorded_at`` so the row looks like a real one.
-
-**The demo fleet** (``--demo``) is 6 devices in 3 groups of two. The two devices of a group run
-almost the same fermentation - that is the "similar pair" for the FR-17 comparison chart and for
-the relative axis of FR-18 - while the groups differ clearly from each other (warm and fast, classic
-wheat, cold and slow). Every device runs four batches of 2-5 days placed on the four weeks around
-now, so the FR-05 table, the FR-16 time ranges and the chart's time axis all have something to show:
-
-    group A   SIM_A1, SIM_A2   West Coast IPA   22 °C, og 15.6 °P, drop 9.8 °P
-    group B   SIM_B1, SIM_B2   Hefeweizen       19 °C, og 13.4 °P, drop 8.2 °P
-    group C   SIM_C1, SIM_C2   Bock (cellar)    12 °C, og 16.2 °P, drop 6.8 °P
-
-Because the last batches lie **after** today, those rows carry future timestamps: the SIM_ cards
-then read a future "last measurement" (a card always shows the newest row of its device), and the
-FR-16 ranges, which only have a *lower* bound, include them. ``--until-now`` writes a fleet whose
-rows all lie in the past - the batches that have not started are not created at all.
-
-The 6-device fleet also makes FR-15 (one clearly distinguishable card per iSpindel) demonstrable
-without six pieces of hardware.
+The data is two sine functions (a falling S-curve for gravity, one cycle per day for the
+temperature), not a model of a real fermentation.
 """
 import argparse
 import math
@@ -51,7 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import db                                                          # noqa: E402
 
 PREFIX = "SIM_"

@@ -1,24 +1,13 @@
 """Minimal iSpindel -> PostgreSQL ingest service.
 
-The stock iSpindel firmware publishes ONE MQTT MESSAGE PER VALUE (no JSON, no timestamp):
+The stock firmware publishes one MQTT message per value (no JSON, no timestamp) under
+ispindel/<name>/<field>: tilt, temperature, temp_units, battery, gravity, interval, RSSI.
+The seven messages of one transmission arrive within milliseconds; `tilt` comes first and
+`RSSI` last, so the row is written when `RSSI` arrives - one row per transmission (FR-11) with
+`recorded_at` = time of receipt (the payload carries no time). The next `tilt` and
+`burst_seconds` are only fallbacks for lost or late messages.
 
-    ispindel/<name>/tilt         45.62
-    ispindel/<name>/temperature  20.31
-    ispindel/<name>/temp_units   C
-    ispindel/<name>/battery      3.912
-    ispindel/<name>/gravity      1.0568
-    ispindel/<name>/interval     900
-    ispindel/<name>/RSSI         -67
-
-All seven messages of one transmission arrive within milliseconds, and the firmware always
-sends `tilt` first and `RSSI` last. The row is therefore written as soon as `RSSI` arrives,
-so `recorded_at` is within milliseconds of the real transmission (the dashboard countdown
-counts from it) and exactly one measurement row is written per transmission (FR-11) -
-whatever interval the device uses. The next `tilt` and `burst_seconds` are only fallbacks
-for messages that were lost or arrive too late.
-The payload carries no time, so the time of receipt on the Pi is used as `recorded_at`.
-
-Run:  python ingest/mqtt_ingest.py
+Run:  python mqtt_service.py
 """
 import logging
 import os
@@ -30,15 +19,20 @@ import paho.mqtt.client as mqtt
 import psycopg
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent
 CFG = yaml.safe_load(Path(os.environ.get("ISPINDEL_CONFIG", ROOT / "config.yml")).read_text())
 MQTT_CFG = CFG["mqtt"]
 ING = CFG["ingest"]
+# NFR-08: config.yml holds the settings; these variables only override single values (compose).
+CFG["database"]["dsn"] = os.environ.get("ISPINDEL_DB_DSN", CFG["database"]["dsn"])
+MQTT_CFG["host"] = os.environ.get("ISPINDEL_MQTT_HOST", MQTT_CFG["host"])
+MQTT_CFG["port"] = int(os.environ.get("ISPINDEL_MQTT_PORT", MQTT_CFG["port"]))
+MQTT_CFG["client_id"] = os.environ.get("ISPINDEL_MQTT_CLIENT_ID",
+                                       MQTT_CFG.get("client_id", "ispindel-ingest"))
 TOPIC = f"{MQTT_CFG['topic_prefix']}/+/+"
 KEEPALIVE = MQTT_CFG.get("keepalive_seconds", 120)
 
-# The topics the stock firmware publishes for one transmission, in the order it sends
-# them. The last one closes the burst, so the row can be written immediately.
+# The topics of one transmission, in the order the firmware sends them (RSSI last).
 BURST_FIELDS = ("tilt", "temperature", "temp_units", "battery", "gravity", "interval", "RSSI")
 
 log = logging.getLogger("ingest")
@@ -154,18 +148,14 @@ def on_message(client, userdata, msg):
         print(f"  {msg.topic} = {payload}", flush=True)
 
     burst = buffer.get(name)
-    # The firmware publishes "tilt" first, so a new tilt ends the previous
-    # transmission. Writing it right away keeps FR-11 true for ANY interval.
+    # a new "tilt" ends the previous transmission (FR-11 holds for any interval)
     if field == "tilt" and burst and burst["fields"]:
         store(name, buffer.pop(name))
         burst = None
     if burst is None:
         burst = buffer[name] = {"started": time.time(), "fields": {}}
     burst["fields"][field] = payload
-    # The transmission is complete as soon as its last topic (RSSI) arrived. Writing it
-    # now instead of waiting for burst_seconds keeps the row - and therefore recorded_at -
-    # within milliseconds of the real transmission. The dashboard countdown counts from
-    # recorded_at, so a 10 s delay here would show up as a 10 s wrong countdown.
+    # complete as soon as RSSI arrived: write now so recorded_at stays within milliseconds
     if all(f in burst["fields"] for f in BURST_FIELDS):
         store(name, buffer.pop(name))
 
@@ -180,10 +170,7 @@ def flush_stale():
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    # The client id must be unique per broker: when a second client connects with an id that
-    # is already in use, mosquitto disconnects the first one. The laptop and the Pi both
-    # subscribe to the same broker (the Pi is the broker), so each needs its own id -
-    # config.yml carries the laptop id, the deploy scripts rewrite it for the Pi.
+    # The client id must be unique per broker, or two clients kick each other off (config.yml).
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                          client_id=MQTT_CFG.get("client_id", "ispindel-ingest"),
                          clean_session=False)

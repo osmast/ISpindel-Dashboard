@@ -3,21 +3,41 @@
 ## End-to-end data path
 
 ```
-  fermenter                                            Raspberry Pi (bare metal, Miniconda)
-  ----------                                           ------------------------------------
-  iSpindel ──Wi-Fi/MQTT (QoS 0)──► MQTT broker
-                                    │ (mosquitto; may run off the Pi - NFR-01)
+  fermenter                                      any machine (Podman/Docker Compose - laptop or Pi)
+  ----------                                     -------------------------------------------------
+  iSpindel ──Wi-Fi/MQTT (QoS 0)──► MQTT broker          container `broker`  (eclipse-mosquitto:2)
+                                    │ (may run off this host - NFR-01)
                                     ▼
                     ingest/mqtt_ingest.py  ──INSERT──►  PostgreSQL 16
-                    (systemd: ispindel-ingest)             │  tables: device, experiment,
-                                                           │  measurement, experiment_event
-                                                           │  views: v_device_latest,
-                                                           │  v_experiment_overview
-                                                           ▼
-                    Plotly Dash + gunicorn  (systemd: ispindel-dashboard, 0.0.0.0:8080)
+                    (container `ingest`)                    container `db`, volume `pgdata`
+                                                            │  tables: device, experiment,
+                                                            │  measurement, experiment_event
+                                                            │  views: v_device_latest,
+                                                            │  v_experiment_overview
+                                                            ▼
+                    Plotly Dash + gunicorn  (container `dashboard`, 0.0.0.0:8080)
                                     │
                     browser in the local network (laptop / smartphone)
 ```
+
+**One compose file** (27.10.2026, eleventh session): `compose.dev.yaml` was merged into
+`compose.yaml`. The dashboard `command` is `${ISPINDEL_DASHBOARD_CMD:-gunicorn ...}`, so
+`./run.sh dev` sets `ISPINDEL_DASHBOARD_CMD="python app/main.py"` for the hot-reload server.
+Since the thirteenth session the repository is **flat** (no `app/` wrapper): `main.py`, `db.py`,
+`components/`, `mqtt_service.py`, `assets/`, `sql/`, `tools/`, `deploy/` sit at the root.
+The dashboard mounts `main.py`, `db.py`, `components/`, `assets/` and `tools/` from the working
+tree, the ingest mounts `mqtt_service.py`; `config.yml`, `sql/schema.sql` and
+`deploy/mosquitto.conf` are mounted too. Commands: `python -u mqtt_service.py` (ingest),
+`gunicorn main:server` (dashboard, `PYTHONPATH=/repo`).
+
+The four services live in `compose.yaml`; `ingest` and `dashboard` are the **same image** built from
+the repository (`Dockerfile`) and differ only in their `command`. `run.sh` is the single entry point
+(`up`, `dev`, `down`, `logs`, `ps`, `test`, `demo`, `backup`, `psql`, `shell`) and picks Podman when
+it is usable, Docker otherwise. Ports: 8080 published to the LAN, 1883 published to the LAN (the
+iSpindel), 5433 bound to 127.0.0.1 only. `ISPINDEL_HTTP_PORT` / `ISPINDEL_PG_PORT` move the host
+ports; the settings inside the container network are always the same, because compose passes
+`ISPINDEL_DB_DSN=…@db:5432` and `ISPINDEL_MQTT_HOST=broker` into the app - a run on the host reads
+the same `config.yml` with `localhost`. That is the whole "no per-machine configuration" trick.
 
 Automation-pyramid assignment (needed for D1): iSpindel = field level, Raspberry Pi ingest =
 control level (data acquisition only, no actuators), PostgreSQL + experiment assignment =
@@ -243,15 +263,18 @@ acceptance test.
 * `deploy/pi_powercycle_test.sh`: T-07 from the laptop - reboot, wait for SSH, wait 60 s, then check
   services, row count, boot order and firewall (writes `/tmp/pi_reboot.log`).
 * `deploy/mosquitto.conf`: minimal LAN broker config for testing.
-* systemd units `ispindel-ingest` and `ispindel-dashboard` with `Restart=always` +
-  `After=network-online.target chrony-wait.service postgresql.service mosquitto.service` ->
-  NFR-03. `chrony-wait.service` is enabled because the Pi has no RTC: without it the clock is days
-  behind at boot and `recorded_at` would be stamped wrong. The units only `Wants=` it, so a slow
-  NTP can never block the ingest for longer than that unit's `TimeoutStartSec=180`.
-* daily `pg_dump -Fc` cron job with 14-day retention and a documented `pg_restore` (NFR-04).
-* **nftables** (`/etc/nftables.conf`, service enabled) closes the dashboard to the internet:
-  8080 only from `160.85.0.0/16`, 22 + 1883 open, INPUT policy `accept` so a wrong rule set can
-  never lock out SSH (NFR-02). Ruleset + revert in README 2.6.
+* systemd unit `ispindel.service` (repository `deploy/systemd/`) = `podman compose up -d`, enabled
+  in `multi-user.target` with `Wants=/After=network-online.target time-sync.target` -> NFR-03. It is
+  the boot step because **rootless Podman has no daemon** that could restore `restart:` policies
+  (Docker does that by itself; `podman-restart.service` is the rootful alternative). `time-sync.target`
+  replaces the old `chrony-wait.service`: the Pi has no RTC, so the clock is days behind at boot and
+  `recorded_at` would be stamped wrong (FR-08/NFR-09).
+* `deploy/systemd/ispindel-backup.{service,timer}`: nightly `pg_dump` via `deploy/backup.sh` into
+  `/var/backups/ispindel`, 14 days retention (NFR-04); the script verifies the dump is not empty
+  before it keeps it.
+* The old nftables ruleset (8080 only from `160.85.0.0/16`) belonged to the bare-metal Pi and is not
+  part of the repository - README says plainly that the dashboard has no authentication and must stay
+  inside the local network.
 * Tailwind: `app/assets/input.pcss` -> `app/assets/tailwind.css` (committed, served by Dash) via
   Tailwind CLI v4.3.3; `.pcss` is kept off Dash's stylesheet list with `assets_ignore=r"\.pcss$"`.
   The source switches automatic source detection off (`@import "tailwindcss" source(none)`) and
@@ -272,9 +295,11 @@ acceptance test.
   `corner-squircle` next to its `rounded-*`.
 * **Schema changes**: `sql/schema.sql` is for a fresh database; an existing one gets a file in
   `sql/migrations/` (`CREATE OR REPLACE VIEW` may only append columns - see the FR-01 migration).
-* **Deployment flow from the Mac**: `rsync -a --exclude node_modules --exclude __pycache__
-  --exclude '*.pyc' --exclude .git --exclude config.yml ./ ispindel-pi:/home/admin/ispindel/`
-  then `ssh ispindel-pi 'cd ~/ispindel && bash deploy/pi_update.sh'` and
-  `python tools/check_requirements.py` on the Pi. `config.yml` is excluded on purpose: it is the
-  only file that must differ (laptop = SSH tunnel 5435 + lab broker, Pi = localhost:5432) and
-  overwriting it silently breaks the next service restart (found the hard way on 20.10.2026).
+* **Deployment = the compose stack, on every machine** (27.10.2026): `git clone` + `./run.sh up`
+  builds the image and starts `db`, `broker`, `ingest`, `dashboard`; `./run.sh down` stops them and
+  keeps the `pgdata` volume. There is no rsync, no `sed` rewriting of `config.yml`, no host package
+  installation and no second configuration file any more - the old flow (rsync excluding
+  `config.yml` + `pi_update.sh` converting the laptop config into a Pi config) is exactly what the
+  container migration removed. `scripts/publish.sh` exports the code-only tree for a public
+  repository (allowlist + deny check: `docs/`, `memory-bank/`, `data/`, `node_modules/` must not be
+  in it).
