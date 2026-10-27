@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import db                                                          # noqa: E402
+from services import db                                                          # noqa: E402
 
 PREFIX = "SIM_"
 # LIKE pattern for the prefix: \_ is a literal underscore, so SIMX... is not matched

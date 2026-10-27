@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 # ISPINDEL_CONFIG points at another config file; ISPINDEL_DB_DSN overrides just the DSN
 # (NFR-08: settings live in config.yml; inside the container network the DB is at `db`).
 CFG = yaml.safe_load(Path(os.environ.get("ISPINDEL_CONFIG", ROOT / "config.yml")).read_text())

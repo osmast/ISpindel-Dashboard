@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # NFR-04: a logical pg_dump in the custom format (consistent while PostgreSQL keeps running).
-#   ./run.sh backup                              or:  bash deploy/backup.sh
+#   bash deploy/backup.sh
 #   ISPINDEL_BACKUP_DIR=/mnt/usb/pg bash deploy/backup.sh
 # Retention: 14 days. Restore: podman compose exec -T db pg_restore -U ispindel -d ispindel --clean
 set -euo pipefail
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 BACKUP_DIR="${ISPINDEL_BACKUP_DIR:-deploy/backups}"
 KEEP_DAYS="${ISPINDEL_BACKUP_KEEP_DAYS:-14}"
 
-# engine + compose provider (same rule as run.sh, kept separate so this script stands alone)
+# engine + compose provider (same detection as the README commands; this script stands alone)
 if [ -n "${ISPINDEL_ENGINE:-}" ]; then ENGINE="$ISPINDEL_ENGINE"
 elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then ENGINE=podman
 elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then ENGINE=docker

@@ -31,9 +31,10 @@ tree, the ingest mounts `mqtt_service.py`; `config.yml`, `sql/schema.sql` and
 `gunicorn main:server` (dashboard, `PYTHONPATH=/repo`).
 
 The four services live in `compose.yaml`; `ingest` and `dashboard` are the **same image** built from
-the repository (`Dockerfile`) and differ only in their `command`. `run.sh` is the single entry point
-(`up`, `dev`, `down`, `logs`, `ps`, `test`, `demo`, `backup`, `psql`, `shell`) and picks Podman when
-it is usable, Docker otherwise. Ports: 8080 published to the LAN, 1883 published to the LAN (the
+the repository (`Dockerfile`) and differ only in their `command`. There is **no wrapper script**
+(removed 27.10.2026): the entry points are the plain compose commands from the README
+(`podman compose up -d --build` / `docker compose ...`), because they work identically in bash and
+in PowerShell. Ports: 8080 published to the LAN, 1883 published to the LAN (the
 iSpindel), 5433 bound to 127.0.0.1 only. `ISPINDEL_HTTP_PORT` / `ISPINDEL_PG_PORT` move the host
 ports; the settings inside the container network are always the same, because compose passes
 `ISPINDEL_DB_DSN=…@db:5432` and `ISPINDEL_MQTT_HOST=broker` into the app - a run on the host reads

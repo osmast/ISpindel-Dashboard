@@ -8,7 +8,7 @@ data/
 memory-bank/
 docs/
 package*.json
-app/deploy/backups/
+deploy/backups/
 config.local.yml
 .venv/
 *.log

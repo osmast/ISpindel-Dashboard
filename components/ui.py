@@ -156,7 +156,11 @@ def field(label, control):
 
 
 def table(headers, rows, empty="no data yet"):
+    """`empty` is either the plain-text placeholder or a ready-made component (e.g. the
+    "where to point an iSpindel" hint of the FR-12 device table)."""
     if not rows:
+        if hasattr(empty, "to_plotly_json"):
+            return empty
         return html.P(empty, className="text-sm text-slate-400")
     return html.Div(
         className="overflow-x-auto",

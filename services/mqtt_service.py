@@ -19,7 +19,7 @@ import paho.mqtt.client as mqtt
 import psycopg
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 CFG = yaml.safe_load(Path(os.environ.get("ISPINDEL_CONFIG", ROOT / "config.yml")).read_text())
 MQTT_CFG = CFG["mqtt"]
 ING = CFG["ingest"]

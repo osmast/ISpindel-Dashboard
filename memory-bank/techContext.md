@@ -11,12 +11,12 @@
 | Dashboard | Plotly Dash >= 3.0 + dash-mantine-components >= 2.8 (`dmc.Grid`) + Plotly >= 6.0 | `app/main.py` |
 | Production server | gunicorn >= 22.0 (`main:server`, `-b 0.0.0.0:8080`) | `app/main.py`, README 2.3 |
 | Config | PyYAML, `config.yml`, override via `ISPINDEL_CONFIG` | `config.yml` |
-| CSS | Tailwind CSS CLI v4.3.3 (`@tailwindcss/cli`) + plugin `@toolwind/corner-shape` 0.0.8-3, source `app/assets/input.pcss` -> committed `tailwind.css` | `package.json`, `app/assets/input.pcss` |
-| Fonts | IBM XGA-AI (7x15 / 12x20 / 12x23 / "12x20 Plus") from *The Ultimate Oldschool PC Font Pack v2.2* (VileR, CC BY-SA 4.0); `.woff`, page default via `@theme --font-sans`, Plotly figures via `charts.FONT_FAMILY` | `app/assets/fonts/`, `app/assets/input.pcss`, `app/components/charts.py` |
-| Serial debugging | pyserial >= 3.5 | `tools/serial_monitor.py` |
-| Runtime | **Podman/Docker Compose** - four containers (`db`, `broker`, `ingest`, `dashboard`); the image is `python:3.12-slim` + `requirements.txt`, started by `run.sh` | `compose.yaml`, `Dockerfile`, `run.sh` |
-| Host | **any machine**: macOS laptop, Linux workstation, Raspberry Pi 4/5 (Raspberry Pi OS 64-bit). On the Pi the stack lives in `/srv/ispindel`, runs rootful and autostarts through `deploy/systemd/ispindel.service` | README |
-| Alternative runtime | Miniconda env `beer` (Python 3.12, conda-forge) or `venv` + `requirements-dev.txt` - only for the host-side tools (Tailwind build, serial console, local amqtt broker) | `environment.yml`, `requirements-dev.txt` |
+| CSS | Tailwind CSS CLI v4.3.3 (`@tailwindcss/cli`) + plugin `@toolwind/corner-shape` 0.0.8-3, source `assets/input.pcss` -> committed `assets/tailwind.css` | `package.json`, `assets/input.pcss` |
+| Fonts | IBM XGA-AI (7x15 / 12x20 / 12x23 / "12x20 Plus") from *The Ultimate Oldschool PC Font Pack v2.2* (VileR, CC BY-SA 4.0); `.woff`, page default via `@theme --font-sans`, Plotly figures via `charts.FONT_FAMILY` | `assets/fonts/`, `assets/input.pcss`, `components/charts.py` |
+| Serial debugging | (removed with `tools/serial_monitor.py`, 27.10.2026) | - |
+| Runtime | **Podman/Docker Compose** - four containers (`db`, `broker`, `ingest`, `dashboard`); the image is `python:3.12-slim` + `requirements.txt`, started with `podman compose up -d --build` (or `docker compose ...`) - the commands are the README, there is no wrapper script | `compose.yaml`, `Dockerfile` |
+| Host | **any machine**: Windows PC, macOS laptop, Linux workstation, Raspberry Pi 4/5 (Raspberry Pi OS 64-bit). On the Pi the stack lives in `/srv/ispindel`, runs rootful and autostarts through `deploy/systemd/ispindel.service` | README |
+| Host-side tools | `venv` + `requirements.txt` (or npm for Tailwind) - only to run `tools/` on the host or to rebuild the CSS; no conda, no `requirements-dev.txt` | `requirements.txt`, `package.json` |
 
 ## Repository layout (27.10.2026, eleventh-thirteenth session)
 
@@ -52,13 +52,13 @@ at the repository root next to the entry point:
 ```bash
 # the whole system, one command; Podman is preferred, Docker is identical
 podman machine start 2>/dev/null || true   # macOS: Podman runs in a VM
-./run.sh up                                # build + db/broker/ingest/dashboard -> http://localhost:8080
-./run.sh demo                              # optional: 6 simulated devices, 17 batches
-./run.sh test                              # the three self-test suites run INSIDE the container
-./run.sh dev                               # app from app/ with Dash hot reload, no rebuild
+podman compose up -d --build               # db/broker/ingest/dashboard -> http://localhost:8080
+podman compose exec -T dashboard python tools/simulate.py --demo --until-now   # demo data
+podman compose exec -T dashboard python tools/check_requirements.py            # self-test
+ISPINDEL_DASHBOARD_CMD="python main.py" podman compose up -d --build           # hot reload
 
-# host-side tools only (UI build, serial console, local broker):
-python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+# host-side tools only:
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
 npm ci && npm run css       # only after changing Tailwind class names
 ```
 
@@ -66,7 +66,8 @@ There is no PostgreSQL cluster, no docker-compose file for the database and no c
 any more: `compose.yaml` provides PostgreSQL 16 (applies `sql/schema.sql` on the first start) and
 mosquitto. The old local cluster in `data/pg` (port 5433) is dead weight and can be deleted.
 The database of the stack is published on `127.0.0.1:5433` (`ISPINDEL_PG_PORT` to move it) so a
-`psql` on the host can look into it; `./run.sh psql` needs no port at all.
+`psql` on the host can look into it; `podman compose exec db psql -U ispindel -d ispindel` needs
+no port at all.
 
 
 ## Key commands / tools in the repo

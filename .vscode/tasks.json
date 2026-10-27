@@ -14,9 +14,12 @@
   "tasks": [
     {
       "label": "Tailwind: build",
-      "detail": "npm run css - rebuild assets/tailwind.css (minified)",
+      "detail": "cd assets && npm run css - rebuild assets/tailwind.css (minified)",
       "type": "shell",
       "command": "npm run css",
+      "options": {
+        "cwd": "${workspaceFolder}/assets"
+      },
       "problemMatcher": [],
       "group": {
         "kind": "build",
@@ -30,9 +33,12 @@
     },
     {
       "label": "Tailwind: watch",
-      "detail": "npm run watch - dev mode, rebuilds on every change (Ctrl-C stops it)",
+      "detail": "cd assets && npm run watch - dev mode, rebuilds on every change (Ctrl-C stops it)",
       "type": "shell",
       "command": "npm run watch",
+      "options": {
+        "cwd": "${workspaceFolder}/assets"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

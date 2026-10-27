@@ -1,6 +1,7 @@
 # Active Context
 
-_Last updated: 27.10.2026 (eleventh session: **repository simplification** - dev-only tooling and
+_Last updated: 27.10.2026 (fourteenth session: the "no iSpindel has reported yet" empty state now
+shows where to point an iSpindel (broker address, port, topic); eleventh session: **repository simplification** - dev-only tooling and
 dotfiles removed, `compose.dev.yaml` merged into `compose.yaml`, comments/docstrings cut hard;
 tenth session: **container migration** - the whole system is four compose
 containers started by `./run.sh up` on any machine; `config.yml` carries no machine-specific value,
@@ -27,6 +28,31 @@ plugin; third session: the requirement side was re-published as prose in `docs/s
 session: experiment auto-end fixed, toast notice, local development database, MQTT client-id
 collision fixed)_
 
+## Session: "no iSpindel has reported yet" shows where to point one (27.10.2026, fourteenth session)
+
+Request: *"instead of 'no iSpindel has reported yet' display info of where to point ispindel to in
+the webapp."* New `main.mqtt_hint(host)` replaces the plain paragraph in **both** empty states - the
+FR-13 overview (`ispindel_overview`) and the FR-12 device table (`device_table`, its `empty` argument
+may now be a component - `components/ui.table` returns a ready-made component instead of wrapping it
+in a `<p>`). The block names the **broker address, port and topic prefix** an iSpindel needs, all
+from `config.yml` (NFR-08) - never hard-coded. The mechanism went through three steps in one session:
+(1) a `dcc.Store` + clientside callback copying `window.location.hostname`; (2) replaced by a
+server-side read of the HTTP `Host` header; (3) **`broker_host()` also rejects a loopback address** -
+the user's point: *"Server: localhost:1883 doesn't help much right?"*, `localhost` is the iSpindel's
+own address, not the machine's. Final logic: non-loopback `Host` wins; else a run **without
+containers** reads the machine's own LAN IPv4 (`/proc`-free UDP-egress trick, guarded by
+`/.dockerenv` / `/run/.containerenv` so a container does not print its private bridge address); else
+the hint says **"the LAN address of this machine"** plus a note that an iSpindel cannot reach
+`localhost` - never a useless value. Verified: container + `Host=localhost` -> note, container +
+`Host=192.168.0.24` -> `192.168.0.24`, mac bare-metal -> `192.168.0.24` (= `en0`). `client_host()`
+handles `host:port` and `[v6]:port`, returns `""` outside a request context (test scripts). New
+Tailwind class `border-dashed`;
+`assets/tailwind.css` rebuilt. `tools/check_requirements.py`: the FR-15 check now has an empty-state
+branch (with no active device the overview is the hint, not a grid) - previously it passed only by
+accident (a plain `<p>` has no card children). Verified in the container on an empty database:
+`check_requirements.py` = ALL PASS, `ui_test.py` = ALL PASS, dashboard/`_dash-layout` = 200.
+
+
 ## Session: repository simplification and flat layout (27.10.2026, eleventh-thirteenth session)
 
 The repository was cut back to a normal student-project shape (request: *"a lot of unnecessary
@@ -37,16 +63,23 @@ single repo"* - no `app/` wrapper). **Removed** as dev-only tooling / over-engin
 `requirements-dev.txt`, and the tools `css_check.py`, `tailwind_class_check.py`, `load_test.py`,
 `mqtt_watch.py`, `serial_monitor.py`, `run_broker.sh`, plus `deploy/powercycle_test.sh`; the
 git-ignored legacy `data/` cluster was deleted. `.vscode/` and `.clinerules/` were restored on
-request. Comments/docstrings were reduced sharply (`main.py` 1595 -> 1248 lines, `README.md`
-348 -> 175); the short `FR-*`/`NFR-*` tags stay (rule 3). **Layout** - root: `main.py`, `db.py`,
-`components/` (`ui.py`, `charts.py`), `mqtt_service.py`, `assets/`, `sql/`, `tools/`, `deploy/`
-plus `run.sh`, `compose.yaml`, `Dockerfile`, `config.yml`, `requirements.txt`, `package*.json`,
-`LICENSE`, `README.md` and the dotfiles. `ingest.py` was renamed `mqtt_service.py`; the components
-moved back into `components/`.
-**Verified:** `podman/docker compose config` clean, `./run.sh up` recreates the stack (image
-rebuilt with `COPY . .`), `./run.sh test` = 134 PASS / 0 FAIL / 0 SKIP, dashboard/`_dash-layout`/
-`tailwind.css` = 200, an MQTT publish gives a correct row (tilt 60 / 20 °C / 1.05), `./run.sh
-backup` writes to `deploy/backups`, `npm run css` rebuilds unchanged.
+request. Comments/docstrings were reduced sharply (`main.py` 1595 -> 1248 lines); the short
+`FR-*`/`NFR-*` tags stay (rule 3). **Layout** - root: `main.py`, `db.py`, `components/`
+(`ui.py`, `charts.py`), `mqtt_service.py`, `assets/`, `sql/`, `tools/`, `deploy/` plus
+`compose.yaml`, `Dockerfile`, `config.yml`, `requirements.txt`, `package*.json`, `LICENSE`,
+`README.md` and the dotfiles. `ingest.py` was renamed `mqtt_service.py`; the components moved
+back into `components/`.
+
+**`run.sh` removed, README is the entry point (fourteenth session).** The wrapper script is gone:
+the README carries the plain copy-paste compose commands for **macOS/Linux/Raspberry Pi (bash)**
+and **Windows (PowerShell)**, plus the per-OS way to find the LAN address, the Pi systemd
+boot/backup install, and a `cmd /c` one-liner as the byte-safe pg_dump alternative on Windows.
+Simulated from scratch (fresh volume = a brand-new machine): `podman compose down -v` then
+`podman compose up -d --build` -> schema created on the empty volume (6 tables), all three
+self-tests ALL PASS, `--demo` seeds 6 devices / 17 experiments / 5583 rows, dashboard and
+`assets/tailwind.css` = 200, `bash deploy/backup.sh` ok, and a redirected `pg_dump -Fc` verified
+as a valid archive (39 TOC entries). `docker compose config` accepts the same file, and the
+container path has no bash/OS dependency (`python -u mqtt_service.py`, `gunicorn main:server`).
 
 ## Current focus
 

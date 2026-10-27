@@ -3,12 +3,26 @@
 _Status checked on 20.10.2026 against the requirement specification (see
 `requirements-traceability.md` for the per-requirement evidence)._
 
+## Empty-state MQTT hint (27.10.2026, fourteenth session)
+
+The two "no iSpindel has reported yet" empty states (FR-13 overview + FR-12 device table) now show
+`main.mqtt_hint()`: server (the address an iSpindel can publish to), port and topic prefix from
+`config.yml` (NFR-08). `main.broker_host()` = non-loopback HTTP `Host` header, else the machine's own
+LAN IPv4 on a run without containers, else nothing - a container opened via `localhost` shows "the
+LAN address of this machine" + a note (an iSpindel cannot reach `localhost`), never a useless value.
+`ui.table` accepts a component as its `empty` argument. New Tailwind class `border-dashed`, CSS
+rebuilt. In the container on an empty database:
+`check_requirements.py` = ALL PASS (the FR-15 check gained an empty-state branch), `ui_test.py` =
+ALL PASS, dashboard = 200.
+
 ## Repository simplification (27.10.2026, eleventh session)
 
 Dev-only tooling and dotfiles removed, `compose.dev.yaml` merged into `compose.yaml`, comments and
 docstrings cut back across the code and the configs, `README.md` rewritten (348 -> 182 lines).
-After the change: `./run.sh test` = 134 PASS / 0 FAIL / 0 SKIP, dashboard / `_dash-layout` /
-`tailwind.css` answer 200. Removal list in `activeContext.md`.
+After the change: `podman compose exec -T dashboard python tools/check_requirements.py` =
+134 PASS / 0 FAIL / 0 SKIP, dashboard / `_dash-layout` / `tailwind.css` = 200. Removal list in
+`activeContext.md`. `run.sh` was removed on 27.10.2026 - the README carries the compose commands
+for bash and PowerShell instead.
 
 ## Summary
 

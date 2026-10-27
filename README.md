@@ -6,8 +6,8 @@ transmission in **PostgreSQL** and shows the live and historical course in a **P
 dashboard in the local network - start and end experiments, follow the fermentation, compare
 batches, export the data as CSV.
 
-The whole system is **four containers** and starts with one command on any machine - a laptop, a
-colleague's computer or a Raspberry Pi:
+The whole system is **four containers** in one `compose.yaml` and runs on a Windows PC, a Mac, a
+Linux box or a Raspberry Pi:
 
 ```
  iSpindel --Wi-Fi/MQTT--> mosquitto :1883 --subscribe--> ingest --INSERT--> PostgreSQL
@@ -17,57 +17,83 @@ colleague's computer or a Raspberry Pi:
                         browser <-- Dash/gunicorn :8080 <-- SELECT ----------+
 ```
 
-## Quick start
+Everything on this page is a copy-paste command. `<engine>` is `podman` or `docker` - pick the
+one you installed; `compose.yaml` and `Dockerfile` are identical for both.
 
-Prerequisite: a container engine with Compose - nothing else. Podman is preferred, Docker works
-identically (`compose.yaml` and `Dockerfile` are engine-neutral).
+## 1 - Install a container engine
+
+Prerequisite: a container engine with Compose. Nothing else - there is no Node.js, no Python, no
+PostgreSQL and no mosquitto on the host, everything runs in the containers.
+
+| Machine | Install |
+| --- | --- |
+| **Raspberry Pi / Debian / Ubuntu** | `sudo apt update && sudo apt install podman podman-compose` |
+| **macOS** | `brew install podman && podman machine init && podman machine start` (or Docker Desktop) |
+| **Windows** | `winget install Docker.DockerDesktop` (or Podman Desktop) with the **WSL 2** backend |
+| check | `<engine> compose version` |
+
+## 2 - Start the system
+
+### macOS, Linux, Raspberry Pi (bash)
 
 ```bash
-# 1. Podman (macOS: Docker Desktop also works, skip this step)
-brew install podman && podman machine init && podman machine start      # macOS
-sudo apt install podman podman-compose                                  # Debian / Raspberry Pi OS
-
-# 2. the system
-git clone <this repository> ispindel-monitor && cd ispindel-monitor
-./run.sh up
+git clone <this repository> ispindel-monitor
+cd ispindel-monitor
+podman compose up -d --build        # Docker instead: docker compose up -d --build
 ```
 
-`./run.sh up` builds the image, starts database, broker, ingest and dashboard and prints
+### Windows (PowerShell)
 
+```powershell
+git clone <this repository> ispindel-monitor
+cd ispindel-monitor
+docker compose up -d --build        # Podman Desktop instead: podman compose up -d --build
 ```
-engine:    podman
-dashboard: http://localhost:8080
-broker:    192.168.0.24:1883   <- point the iSpindel here
+
+The first run builds the image (a minute or two) and starts four containers. Check them with
+
+```bash
+<engine> compose ps
 ```
 
-That is the running system: the dashboard is on <http://localhost:8080>, the schema is created by
-PostgreSQL itself on the first start, and an iSpindel that publishes to this machine's port 1883
-is stored and shown immediately.
+Now point the iSpindel at this machine - MQTT server = the LAN address, port `1883`:
 
-Want something to look at first? `./run.sh demo` seeds six simulated iSpindels with 17 batches
-(batch cards, comparison chart, CSV export); `./run.sh test` runs the automatic self-tests.
+| OS | The LAN address |
+| --- | --- |
+| macOS | `ipconfig getifaddr en0` |
+| Linux / Raspberry Pi | `hostname -I` |
+| Windows | `ipconfig` (IPv4 of the active adapter) |
 
-## The four containers
+Open <http://localhost:8080> - the dashboard. PostgreSQL creates the schema on the first start, so
+an iSpindel that publishes to port 1883 is stored and shown immediately.
+
+### Something to look at first
+
+```bash
+<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now
+<engine> compose exec -T dashboard python tools/check_requirements.py
+```
+
+`--demo` seeds six simulated iSpindels with 17 batches (cards, comparison chart, CSV export).
+Remove it again with `python tools/simulate.py --delete`.
+
+## 3 - The four containers
 
 | Service | Image / build | What it does | Reachable at |
 | --- | --- | --- | --- |
-| `db` | `postgres:16-alpine` | storage; applies `sql/schema.sql` on the first start | `127.0.0.1:5433` (loopback only) |
-| `broker` | `eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` (LAN) |
+| `db` | `postgres:16-alpine` | storage; applies `sql/schema.sql` on the first start | `127.0.0.1:5433` - **loopback only** |
+| `broker` | `eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` - LAN |
 | `ingest` | this repository (`Dockerfile`) | assembles the 7 messages of one transmission into one row | - |
-| `dashboard` | this repository (`Dockerfile`) | Plotly Dash behind gunicorn | `<host>:8080` (LAN) |
+| `dashboard` | this repository (`Dockerfile`) | Plotly Dash behind gunicorn | `<host>:8080` - LAN |
 
-`compose.yaml` is the only place where the system is wired together; `./run.sh` is a thin wrapper
-around it that also picks the engine. Both the ingest service and the dashboard run from the
-**same image** and differ only in their `command`.
+The three official images are multi-arch, so the same `compose.yaml` runs on x86-64 and on the
+Raspberry Pi (arm64). `ingest` and `dashboard` are the **same image** and differ only in their
+`command`. The dashboard has **no authentication** - keep it inside the local network.
 
-Ports can be moved without editing anything: `ISPINDEL_HTTP_PORT=8090 ISPINDEL_PG_PORT=5434
-./run.sh up` (the ports *inside* the container network never change).
-
-## Configuration
+## 4 - Configuration
 
 All settings live in **`config.yml`** - never in the code (NFR-08). The file is committed and
-contains **no machine-specific value**: it describes the setup the containers implement, so
-nothing has to be rewritten when the system moves to another machine.
+contains **no machine-specific value**, so nothing has to be rewritten on another machine.
 
 | Setting | Meaning |
 | --- | --- |
@@ -80,43 +106,81 @@ nothing has to be rewritten when the system moves to another machine.
 | `dashboard.timezone` | display time zone (NFR-09; stored in UTC) |
 
 Inside the container network `compose.yaml` overrides only the addresses
-(`ISPINDEL_DB_DSN`, `ISPINDEL_MQTT_HOST`, `ISPINDEL_MQTT_PORT`, `ISPINDEL_MQTT_CLIENT_ID`).
-`ISPINDEL_CONFIG=/path/to/other.yml` points any component at a different file.
-
-## `./run.sh` commands
-
-| Command | Effect |
-| --- | --- |
-| `up` | build and start all four containers |
-| `dev` | same stack, but the app runs from the source tree with Dash hot reload |
-| `down` | stop and remove the containers (the `pgdata` volume - the data - survives) |
-| `logs` | follow the logs of all services |
-| `ps` | what runs, plus the health of database and broker |
-| `test` | the three self-tests, inside the container |
-| `demo` | seed the simulated 6-device fleet |
-| `backup` | `pg_dump` into `deploy/backups` (14 days retention, NFR-04) |
-| `psql` | interactive psql on the database |
-| `shell` | a shell inside the dashboard container |
-
-## Raspberry Pi
-
-The stack is the same as on a laptop. On the Pi it lives in `/srv/ispindel` and needs a **boot
-step** (NFR-03) and a **nightly backup** (NFR-04), both shipped in `deploy/systemd/`:
+(`ISPINDEL_DB_DSN`, `ISPINDEL_MQTT_HOST`, `ISPINDEL_MQTT_CLIENT_ID`). Two host ports can be moved
+without editing anything:
 
 ```bash
-sudo cp deploy/systemd/ispindel.service /etc/systemd/system/
-sudo cp deploy/systemd/ispindel-backup.{service,timer} /etc/systemd/system/
+ISPINDEL_HTTP_PORT=8090 ISPINDEL_PG_PORT=5434 podman compose up -d
+```
+
+```powershell
+$env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
+```
+
+`ISPINDEL_CONFIG=/path/to/other.yml` points any component at a completely different file.
+
+## 5 - Everyday commands
+
+`<engine>` = `podman` or `docker`. Run them in the cloned directory.
+
+| What | Command |
+| --- | --- |
+| start / update after a code change | `<engine> compose up -d --build` |
+| stop (the `pgdata` volume - the data - survives) | `<engine> compose down` |
+| follow the logs (Ctrl-C leaves them running) | `<engine> compose logs -f --tail 50` |
+| what runs | `<engine> compose ps` |
+| is the database ready? | `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
+| the three self-tests | `<engine> compose exec -T dashboard python tools/check_requirements.py` etc. |
+| seed the demo fleet | `<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now` |
+| a psql prompt on the database | `<engine> compose exec db psql -U ispindel -d ispindel` |
+| a shell inside the dashboard container | `<engine> compose exec dashboard bash` |
+| development (Dash hot reload, writes to the source tree) | `ISPINDEL_DASHBOARD_CMD="python main.py" <engine> compose up -d --build` |
+
+On Windows the last one is `$env:ISPINDEL_DASHBOARD_CMD="python main.py"; docker compose up -d --build`.
+
+## 6 - Raspberry Pi: start on boot and nightly backup
+
+Two systemd units in `deploy/systemd/` make the Pi a set-and-forget box (NFR-03 / NFR-04).
+Put the clone in `/srv/ispindel` (the units use that path):
+
+```bash
+sudo mkdir -p /srv && sudo git clone <this repository> /srv/ispindel
+cd /srv/ispindel && sudo podman compose up -d --build
+
+sudo cp deploy/systemd/ispindel.service deploy/systemd/ispindel-backup.service deploy/systemd/ispindel-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now ispindel ispindel-backup.timer
 ```
 
-The Pi has no real-time clock, so both units wait for `time-sync.target` - without a correct
-clock `recorded_at` would be stamped wrong (FR-08 / NFR-09).
+* `ispindel.service` runs `podman compose up -d` at boot. With Podman there is no daemon that
+  could restore the containers, so this unit **is** the boot mechanism. (Docker restores them by
+  itself - the unit is harmless there, `systemctl enable ispindel` is simply optional.)
+* `ispindel-backup.timer` runs `deploy/backup.sh` nightly at 03:30 into `/var/backups/ispindel`,
+  keeps 14 days and verifies the dump is not empty.
+* The Pi has **no real-time clock**: both units wait for `time-sync.target`, otherwise
+  `recorded_at` would be stamped wrong (FR-08 / NFR-09).
 
-## Tests
+A manual backup (also fine on the Mac or on Windows):
 
-`./run.sh test` runs the browser-less checks **inside the dashboard container** (same code, same
-config, the database of the stack):
+```bash
+bash deploy/backup.sh                                        # Linux, macOS, Raspberry Pi
+```
+
+```powershell
+# `cmd /c` keeps the bytes intact (PowerShell's `>` would write UTF-16 and corrupt the dump)
+cmd /c "mkdir deploy\backups 2>nul & docker compose exec -T db pg_dump -U ispindel -Fc -d ispindel > deploy\backups\ispindel.dump"
+```
+
+## 7 - Tests
+
+The checks run **inside the dashboard container** - same code, same config, the database of the
+stack - so no local Python is needed:
+
+```bash
+<engine> compose exec -T dashboard python tools/check_requirements.py
+<engine> compose exec -T dashboard python tools/ui_test.py
+<engine> compose exec -T dashboard python tools/fr19_test.py
+```
 
 | Script | Checks |
 | --- | --- |
@@ -124,56 +188,56 @@ config, the database of the stack):
 | `tools/ui_test.py` | the experiment dialog and the table row actions |
 | `tools/fr19_test.py` | the status indication (healthy / stale / low battery) |
 
-They create only `zz_*` rows and clean up after themselves. `tools/fake_spindel.py` (simulated
-iSpindel) and `tools/simulate.py` (demo data) need no hardware either.
+They create only `zz_*` rows and clean up after themselves. `tools/fake_spindel.py` simulates an
+iSpindel (7 MQTT topics) without hardware.
 
-## Development (host-side only)
+## 8 - Development (host-side only)
 
 ```bash
-npm ci && npm run css                           # Tailwind build (after a class change)
+cd assets && npm ci && npm run css              # Tailwind build -> assets/tailwind.css
 python -m venv .venv && .venv/bin/pip install -r requirements.txt   # only to run tools/ on the host
 ```
 
 The UI is styled with **Tailwind v4**; `assets/input.pcss` is the source and
-`assets/tailwind.css` is the committed build artefact served statically - **a class added to
-the Python code does nothing until `npm run css` is run**. Every class string is written out in
-full inside a `className`/`extra` argument (Tailwind compiles from the raw file text).
+`assets/tailwind.css` is the committed build artefact served statically - **a class added to the
+Python code does nothing until `cd assets && npm run css` is run**. Every class string is written
+out in full inside a `className`/`extra` argument (Tailwind compiles from the raw file text).
 
-## Troubleshooting
+## 9 - Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| dashboard not reachable | `./run.sh ps`, then `./run.sh logs dashboard` |
-| no measurements arrive | `./run.sh logs ingest` (prints every topic when `ingest.log_messages` is on), `./run.sh logs broker` |
-| ingest stores nothing | database reachable? `./run.sh ps` runs `pg_isready` |
-| stale UI after a class change | the CSS is baked into the image - run `npm run css`, then `./run.sh up` |
-| changed `compose.yaml`, weird behaviour | `./run.sh down && ./run.sh up` (a changed port/volume needs a recreate) |
+| dashboard not reachable | `<engine> compose ps`, then `<engine> compose logs dashboard` |
+| no measurements arrive | `<engine> compose logs ingest` (prints every topic when `ingest.log_messages` is on), `<engine> compose logs broker` |
+| ingest stores nothing | is the database up? `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
+| stale UI after a class change | the CSS is baked into the image - run `cd assets && npm run css`, then `<engine> compose up -d --build` |
+| changed `compose.yaml`, weird behaviour | `<engine> compose down && <engine> compose up -d` (a changed port/volume needs a recreate) |
+| port already in use | move it: `ISPINDEL_HTTP_PORT=8090` (see section 4) |
+| "no container with ID or name" (Podman) | never remove containers by hand - always `compose down` |
 
-## Repository layout
+## 10 - Repository layout
 
 ```
-run.sh                    entry point: up / dev / down / logs / ps / test / demo / backup / psql / shell
 compose.yaml              the four services
 Dockerfile                the image of the ingest service and the dashboard (one build, two commands)
 config.yml                all settings (NFR-08), no machine-specific value in it
 requirements.txt          runtime dependencies - what the image installs
-package.json              Tailwind CLI build step for assets/tailwind.css
 
-main.py                   Plotly Dash dashboard (cards, tables, callbacks, export)
-db.py                     tiny PostgreSQL helper
+main.py                   Plotly Dash dashboard (the only Python file in the root)
 components/ui.py          reusable Tailwind layout components
 components/charts.py      Plotly fermentation charts
-mqtt_service.py           MQTT -> PostgreSQL: assembles the 7 messages into one row
-assets/                   served by Dash: input.pcss -> tailwind.css (committed), card_state.js, fonts/
+services/db.py            tiny PostgreSQL helper
+services/mqtt_service.py  MQTT -> PostgreSQL: assembles the 7 messages into one row
+assets/                   Dash-served: tailwind.css, card_state.js, fonts/; package.json builds the CSS
 sql/schema.sql            schema, keys, views; applied automatically on the first start
 sql/migrations/           view/constraint migrations for a database that already exists
-tools/                    self-tests and simulators (run via ./run.sh)
+tools/                    self-tests and simulators
 deploy/mosquitto.conf     broker configuration (mounted into the broker container)
 deploy/backup.sh          pg_dump with 14 days retention (NFR-04)
 deploy/systemd/           boot step + nightly backup timer for the Raspberry Pi
 ```
 
-## Requirements and licence
+## 11 - Requirements and licence
 
 The comments in the code name the requirement they implement (`FR-01` ... `FR-22`, `NFR-01` ...
 `NFR-09`), which come from the assignment specification. Code: **MIT** (see `LICENSE`). The

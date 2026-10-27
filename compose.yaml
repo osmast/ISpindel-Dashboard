@@ -1,8 +1,8 @@
 # The whole system as four containers (database, broker, ingest, dashboard).
 #
-#   ./run.sh up     build and start everything   -> http://localhost:8080
-#   ./run.sh dev    same stack, but the app runs from the source tree (Dash hot reload)
+#   podman compose up -d --build     (or `docker compose ...`) -> http://localhost:8080
 #
+# The commands for start/stop/logs/tests are in the README (`<engine>` = podman or docker).
 # The `pgdata` volume keeps the measurements across `down`, a rebuild and a reboot
 # (NFR-03/NFR-04). The schema is applied by PostgreSQL itself on the first start.
 name: ispindel
@@ -49,7 +49,7 @@ services:
     image: ispindel-monitor:latest
     build: .
     restart: unless-stopped
-    command: python -u mqtt_service.py
+    command: python -u services/mqtt_service.py
     depends_on:
       db:
         condition: service_healthy
@@ -64,13 +64,13 @@ services:
     volumes:
       # the source is mounted so an edit only needs a container restart, not a rebuild
       - ./config.yml:/repo/config.yml:ro
-      - ./mqtt_service.py:/repo/mqtt_service.py:ro
+      - ./services:/repo/services:ro
 
   dashboard:
     image: ispindel-monitor:latest
     build: .
     restart: unless-stopped
-    # `./run.sh dev` replaces this with `python main.py` (Dash hot reload).
+    # `ISPINDEL_DASHBOARD_CMD="python main.py"` (README section 5) gives Dash hot reload.
     command: "${ISPINDEL_DASHBOARD_CMD:-gunicorn main:server -b 0.0.0.0:8080 --workers 1 --threads 4 --timeout 120}"
     depends_on:
       db:
@@ -83,7 +83,7 @@ services:
     volumes:
       - ./config.yml:/repo/config.yml:ro
       - ./main.py:/repo/main.py
-      - ./db.py:/repo/db.py:ro
+      - ./services:/repo/services
       - ./components:/repo/components
       - ./assets:/repo/assets
       - ./tools:/repo/tools:ro

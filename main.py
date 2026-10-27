@@ -3,16 +3,20 @@
 Run:  python main.py                              ->  http://localhost:8080
       gunicorn main:server -b 0.0.0.0:8080
 """
+import os
+import socket
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import dash
 import dash_mantine_components as dmc
 import psycopg
 from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
+from flask import request
 
 from components import charts, ui
-from db import CFG, LOCAL, execute, local, query, rows_to_csv
+from services.db import CFG, LOCAL, execute, local, query, rows_to_csv
 
 DASH = CFG["dashboard"]
 REFRESH = DASH["refresh_ms"]
@@ -108,8 +112,11 @@ def device_form(values=None, disabled=False):
 
 
 
-# assets_ignore: assets/input.pcss is the Tailwind source, not a stylesheet to link.
-app = dash.Dash(__name__, title="iSpindel Monitor", assets_ignore=r"\.pcss$")
+# Dash links every .css/.js under assets/ automatically. `assets_ignore` matches file names
+# (skip the Tailwind source input.pcss); `assets_path_ignore` matches path levels (skip
+# node_modules, the npm install that builds the CSS - it is full of package stylesheets).
+app = dash.Dash(__name__, title="iSpindel Monitor", assets_ignore=r"\.pcss$",
+                assets_path_ignore=[r"node_modules"])
 server = app.server                                   # gunicorn entry point
 
 
@@ -281,6 +288,51 @@ app.clientside_callback(
     Input("tick1s", "n_intervals"),
 )
 
+# The empty state has to name the broker address an iSpindel publishes to. The server cannot read
+# its own LAN address inside a container (`socket.gethostbyname`, the UDP egress trick and
+# `hostname -I` all return the private bridge address, e.g. 172.x). What it can do:
+#   * the browser reached the dashboard through the machine's LAN address (NFR-02) and sent it in
+#     the HTTP `Host` header - a callback runs inside the request, so `request` is available;
+#   * a run without containers can read the machine's own LAN address.
+# Neither helps when the dashboard is opened on the machine itself via `localhost`: that address is
+# useless to an iSpindel, so the hint then says so instead of printing it (see `mqtt_hint`).
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def client_host():
+    """The host the browser used for this request (the HTTP `Host` header), without the dashboard
+    port. Empty outside a request context (e.g. a test script)."""
+    try:
+        return urlsplit("//" + request.host).hostname or ""    # handles `host:port` and `[v6]:port`
+    except RuntimeError:
+        return ""
+
+
+def own_lan_address():
+    """This machine's own non-loopback IPv4 - the LAN address an iSpindel can publish to. Only a
+    run without containers knows it: inside one it is the private bridge address, not usable."""
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return ""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))    # only picks the default route - nothing is sent
+        return sock.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        sock.close()
+
+
+def broker_host():
+    """The address an iSpindel should point at: the one the browser used, unless that is a loopback
+    address (`localhost` says nothing about the network the iSpindel floats in). Without containers
+    the machine's own LAN address is the fallback; otherwise the hint explains the situation."""
+    host = client_host()
+    if host and host.lower() not in LOOPBACK_HOSTS:
+        return host
+    return own_lan_address()
+
+
 # ---- callbacks ------------------------------------------------------------
 
 @app.callback(Output("devices", "children"), Output("devices-table", "children"),
@@ -298,8 +350,9 @@ def update_dashboard(_, __, viewport, selected, open_cards):
     running = [r for r in rows if r["is_active"]]
     completed = [r for r in rows if not r["is_active"]]
     devices = device_rows()
-    return (ispindel_overview(open_cards or {}, (viewport or {}).get("mobile", False)),
-            device_table(devices),
+    host = broker_host()
+    return (ispindel_overview(open_cards or {}, (viewport or {}).get("mobile", False), host),
+            device_table(devices, host),
             experiment_table(running, selected, empty="no experiment is running"),
             experiment_table(completed, selected, empty="no experiment has been completed yet"),
             f"Running ({len(running)})", f"Completed ({len(completed)})",
@@ -323,9 +376,41 @@ def update_device_times(_):
     return times
 
 
-def ispindel_overview(open_cards=None, mobile=False):
+def mqtt_hint(host=""):
+    """Shown while no iSpindel has reported yet (FR-13 overview / FR-12 device table): instead of
+    only "no iSpindel has reported yet" it says where to point one. Port and topic prefix come from
+    config.yml (NFR-08); `host` is the LAN address an iSpindel can publish to (`broker_host`). When
+    that address is unknown (a container opened via `localhost`) the block does not print a useless
+    `localhost` but says which address is meant."""
+    port = CFG["mqtt"]["port"]
+    prefix = CFG["mqtt"]["topic_prefix"]
+    rows = [
+        html.Li([html.Span("Server: ", className="text-slate-500"),
+                 html.Span(host or "the LAN address of this machine")]),
+        html.Li([html.Span("Port: ", className="text-slate-500"), html.Span(str(port))]),
+        html.Li([html.Span("Topic: ", className="text-slate-500"),
+                 html.Span(f"{prefix}/<name>/<field> (prefix {prefix})")]),
+    ]
+    note = [] if host else [
+        html.P('An iSpindel cannot reach "localhost" - open this dashboard via the machine\'s LAN '
+               "address instead and it will appear here.",
+               className="mt-2 text-xs text-slate-400"),
+    ]
+    return html.Div(
+        className="rounded-lg corner-squircle border border-dashed border-slate-300 bg-slate-50 "
+                  "p-4 text-sm text-slate-600",
+        children=[
+            html.P("No iSpindel has reported yet.", className="font-medium text-slate-700"),
+            html.P("Point an iSpindel at this monitor - its MQTT configuration:",
+                   className="mt-1 text-slate-500"),
+            html.Ul(className="mt-2 grid gap-1", children=rows),
+            *note,
+        ])
+
+
+def ispindel_overview(open_cards=None, mobile=False, host=""):
     """One batch card per iSpindel. `open_cards` keeps the open state across a rebuild;
-    `mobile` comes from the `viewport` store (NFR-06)."""
+    `mobile` comes from the `viewport` store (NFR-06); `host` fills the empty-state hint."""
     open_cards = open_cards or {}
     rows = query("""SELECT l.device_id, l.mqtt_name, l.recorded_at, l.tilt_deg, l.temp_c,
                            l.gravity_plato, l.battery_v, l.interval_s, l.rssi_dbm
@@ -333,7 +418,7 @@ def ispindel_overview(open_cards=None, mobile=False):
                     WHERE d.is_active
                     ORDER BY l.mqtt_name""")
     if not rows:
-        return html.P("no iSpindel has reported yet", className="text-sm text-slate-400")
+        return mqtt_hint(host)
     history = query("""SELECT device_id, recorded_at,
                               gravity_plato::float8 AS gravity_plato,
                               temp_c::float8 AS temp_c
@@ -779,8 +864,9 @@ def device_rows():
                     ORDER BY d.mqtt_name""")
 
 
-def device_table(rows, empty="no iSpindel has reported yet"):
-    """The FR-12 device overview: every iSpindel the system knows, with its settings action."""
+def device_table(rows, host=""):
+    """The FR-12 device overview: every iSpindel the system knows, with its settings action.
+    The empty state is the same "where to point an iSpindel" hint as the FR-13 overview."""
     body = [[html.Span(r["mqtt_name"]),
              r["display_name"] or "-",
              ui.badge("in use", "green") if r["is_active"] else ui.badge("ignored", "slate"),
@@ -789,7 +875,7 @@ def device_table(rows, empty="no iSpindel has reported yet"):
              f"{r['interval_s']} s" if r["interval_s"] else "-",
              str(r["measurements"]),
              device_actions(r["id"])] for r in rows]
-    return ui.table(DEVICE_HEADERS, body, empty=empty)
+    return ui.table(DEVICE_HEADERS, body, empty=mqtt_hint(host))
 
 
 def device_values(device_id):

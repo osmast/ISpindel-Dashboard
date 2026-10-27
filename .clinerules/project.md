@@ -2,17 +2,17 @@
 
 A fermentation monitor: an iSpindel publishes gravity/temperature over MQTT, an ingest service
 stores one row per transmission in PostgreSQL, and a Plotly Dash dashboard shows live and
-historical data. The whole system runs as a Podman/Docker Compose stack (`./run.sh up`).
+historical data. The whole system runs as a Podman/Docker Compose stack (README section 2).
 
 ## Running and testing
 
-* `./run.sh up | down | logs | ps | test | demo | backup | psql | shell` - the only entry point.
-  It picks Podman when it is usable, Docker otherwise (`ISPINDEL_ENGINE=podman|docker` forces one).
-* `./run.sh test` runs `tools/check_requirements.py`, `tools/ui_test.py` and
-  `tools/fr19_test.py` *inside the container*, which is why they need no local Python
-  environment.
-* `npm run css` / `npm run watch` rebuild `assets/tailwind.css` (Node.js on the host) and must
-  be run after a UI class change.
+* The stack is plain Compose: `podman compose up -d --build` (or `docker compose ...`). Every
+  command is listed in the README (`<engine>` = podman or docker).
+* The self-tests run *inside the container* (README section 7):
+  `<engine> compose exec -T dashboard python tools/check_requirements.py` - so they need no local
+  Python environment.
+* The Tailwind build lives in `assets/` (Node.js on the host): `cd assets && npm ci` once, then
+  `cd assets && npm run css` after a UI class change.
 
 ## Rules that are not negotiable
 
@@ -30,8 +30,8 @@ historical data. The whole system runs as a Podman/Docker Compose stack (`./run.
    only understands the `classRegex` shapes in `.vscode/settings.json`, and a reader cannot see a
    composed name either.
 5. **`assets/tailwind.css` is a build artefact**, never a source: after a class change run
-   `npm run css` (or `npm run watch` while editing) and commit the rebuilt file. It is served
-   statically - there is no Tailwind at runtime, and the container never runs Node.
+   `cd assets && npm run css` (or `npm run watch` while editing) and commit the rebuilt file. It is
+   served statically - there is no Tailwind at runtime, and the container never runs Node.
 6. **Schema changes go into `sql/schema.sql`** (fresh database) **and** a file in
    `sql/migrations/` (existing database). `CREATE OR REPLACE VIEW` may only append columns.
 7. **Deployment is the compose stack, nothing else.** Do not add host-specific install steps,

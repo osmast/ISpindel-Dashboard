@@ -1,6 +1,7 @@
 """Self-test of the requirements that need no hardware (part of the acceptance test).
 
-Run from the repository root or inside the dashboard container:  ./run.sh test
+Run from the repository root or inside the dashboard container:
+    <engine> compose exec -T dashboard python tools/check_requirements.py
 It talks to the database from config.yml only. Everything it creates is named ``zz_validation*``
 and deleted again before it exits; the script exits non-zero if any check fails.
 """
@@ -58,15 +59,22 @@ main.execute("DELETE FROM device WHERE mqtt_name LIKE %(pat)s", {"pat": "zz_vali
 
 # ---- FR-12 / FR-13 / FR-15: the overview renders one card per active device ----
 overview = main.ispindel_overview({})
-cards = [c for c in overview.children if getattr(c, "children", None)]
 # one card per **active** row of v_device_latest, no repeats - that is what FR-13/FR-15 ask for
 # (the count is not hard-coded: a simulated device from tools/simulate.py is a device like any
 # other, and one switched to "ignored" in the Devices table leaves the overview)
 devices = main.query("""SELECT count(*) AS n FROM v_device_latest l
                         JOIN device d ON d.id = l.device_id
                         WHERE d.is_active""")[0]["n"]
-check("FR-15 one card per active device (DEV_REPEAT=1)", len(cards) == devices,
-      f"cards={len(cards)} active devices={devices}")
+if devices:
+    cards = [c for c in overview.children if getattr(c, "children", None)]
+    check("FR-15 one card per active device (DEV_REPEAT=1)", len(cards) == devices,
+          f"cards={len(cards)} active devices={devices}")
+else:
+    # no active device: the overview is the "where to point an iSpindel" hint, not a grid
+    dumped = json.dumps(overview.to_plotly_json(), default=str)
+    check("FR-15 empty overview says where to point an iSpindel",
+          "No iSpindel has reported yet" in dumped and str(main.CFG["mqtt"]["port"]) in dumped
+          and main.CFG["mqtt"]["topic_prefix"] in dumped)
 
 # FR-12: the Devices table lists the master data of every iSpindel plus the reported interval,
 # with one settings action per row - a new iSpindel appears here without any code change
