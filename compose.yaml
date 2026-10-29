@@ -87,7 +87,7 @@ services:
     build: .
     restart: unless-stopped
     # `ISPINDEL_DASHBOARD_CMD="python main.py"` (README section 5) gives Dash hot reload.
-    command: "${ISPINDEL_DASHBOARD_CMD:-gunicorn main:server -b 0.0.0.0:8080 --workers 1 --threads 4 --timeout 120}"
+    command: "${ISPINDEL_DASHBOARD_CMD:-gunicorn main:server -b 0.0.0.0:8081 --workers 1 --threads 4 --timeout 120}"
     depends_on:
       db:
         condition: service_healthy
@@ -95,7 +95,7 @@ services:
       ISPINDEL_DB_DSN: postgresql://ispindel:ispindel@db:5432/ispindel
       TZ: UTC
     ports:
-      - "${ISPINDEL_HTTP_PORT:-8080}:8080"      # NFR-02: the LAN opens <host>:8080
+      - "${ISPINDEL_HTTP_PORT:-8081}:8081"      # NFR-02: the LAN opens <host>:8080
     volumes:
       - ./config.yml:/repo/config.yml:ro
       - ./main.py:/repo/main.py

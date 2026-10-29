@@ -165,16 +165,6 @@ app = dash.Dash(__name__, title="iSpindel Monitor", assets_ignore=r"\.pcss$",
                 assets_path_ignore=[r"node_modules"])
 server = app.server                                   # gunicorn entry point
 
-# The tab icon is the beer SVG instead of Dash's default favicon. Dash only links a file that is
-# literally called `favicon.ico` - and always with `type="image/x-icon"` (dash/dash.py) - so an
-# .svg cannot be dropped into assets/ like the fonts; it is wired up through the `{%favicon%}`
-# placeholder of the default index template. Decoration: no FR/NFR asks for a tab icon (NFR-05 is
-# about the language of the UI), so no requirement id is named here. The file itself is
-# `assets/favicon-beer.svg`; assets/ is served statically, so this is the whole wiring.
-app.index_string = app.index_string.replace(
-    "{%favicon%}",
-    f'<link rel="icon" type="image/svg+xml" href="{app.get_asset_url("favicon-beer.svg")}">')
-
 
 def layout():
     return ui.page([
@@ -664,9 +654,9 @@ def temp_hint(temp, span):
         return None
     low, high = span
     if temp > high:
-        return f"\u25b2 {temp - high:.1f} °C High", "high"
+        return f"\u25b2 {temp - high:.1f} High", "high"
     if temp < low:
-        return f"\u25bc {low - temp:.1f} °C Low", "low"
+        return f"\u25bc {low - temp:.1f} Low", "low"
     return "\u2713 in range", "in"
 
 
@@ -773,7 +763,7 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                                     className="text-yellow-600 group-open:hidden"),
                         header_stat(f"{ui.num(temp, 1)} °C",
                                     className="text-purple-700 group-open:hidden"),
-                        header_stat(f"Bat: {pct:.0f} %",
+                        header_stat(f"{pct:.0f} %",
                                     className=("text-amber-600" if low else "text-emerald-600")),
                         # chevron: a corner rotated 45 deg points down, 225 deg points up
                         html.Span(className="ml-1 h-2 w-2 rotate-45 border-b-2 border-r-2 "
@@ -789,25 +779,29 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                 dmc.Grid(gutter=8, children=[
                     # GRAVITY: the reading, the batch's OG, the target FG and the 24 h rate
                     dmc.GridCol(ui.zone(
-                        "Gravity",
+                        "Gravity °P | °P 24h",
                         html.Div(className="flex items-baseline gap-1.5", children=[
                             html.Span(ui.num(gravity, 1),
                                       className="text-2xl font-semibold tabular-nums "
                                                 "text-yellow-600"),
+                            html.Span("|", className="text-slate-300"),
+                            html.Span(value_text(rate),
+                                        className="text-2xl font-semibold tabular-nums "
+                                                "text-slate-800"),
                             html.Span("°P", className="text-sm text-slate-500"),
-                            html.Span(f"(OG {value_text(og, ' °P')})",
-                                      className="text-xs text-slate-400"),
                         ]),
-                        html.Div(f"Target FG: ~{value_text(fg_target, ' °P' )}" if value_text else None,
-                                 className="mt-1 text-xs text-slate-500"),
-                        html.Div(className="text-xs text-slate-500", children=[
-                            "Rate: ",
-                            # falling gravity = running (green), rising = wrong (red), none if unknown
-                            html.Span(value_text(rate, " °P/24h"), className=(
-                                "font-medium text-emerald-600"
-                                if rate is not None and rate < 0 else
-                                "font-medium text-red-600" if rate is not None else "")),
-                        ]),
+                        # html.Span(f"(OG {value_text(og, ' °P')})",
+                        #             className="text-xs text-slate-400"),
+                        # html.Div(f"Target FG: ~{value_text(fg_target, ' °P' )}" if value_text else None,
+                        #          className="mt-1 text-xs text-slate-500"),
+                        # html.Div(className="text-xs text-slate-500", children=[
+                        #     "Rate: ",
+                        #     # falling gravity = running (green), rising = wrong (red), none if unknown
+                        #     html.Span(value_text(rate, " °P/24h"), className=(
+                        #         "font-medium text-emerald-600"
+                        #         if rate is not None and rate < 0 else
+                        #         "font-medium text-red-600" if rate is not None else "")),
+                        # ]),
                     ), span={"base": 12, "sm": 4}),
                     # TEMPERATURE: reading, target window of the style, deviation
                     dmc.GridCol(ui.zone(
@@ -816,16 +810,16 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                             html.Span(ui.num(temp, 1),
                                       className="text-2xl font-semibold tabular-nums "
                                                 "text-purple-700"),
-                            html.Span("°C", className="text-sm text-slate-500"),
+                            html.Div(hint[0], className=(
+                                "text-xs font-medium text-amber-600"
+                                if hint and hint[1] == "high" else
+                                "text-xs font-medium text-sky-700" if hint and hint[1] == "low" else
+                                "text-xs font-medium text-emerald-600")) if hint else None,
+                            # html.Span("°C", className="text-sm text-slate-500"),
                         ]),
-                        html.Div(f"Target: {target_span[0]:.1f}\u2013{target_span[1]:.1f} °C"
-                                 if target_span else None,
-                                 className="mt-1 text-xs text-slate-500"),
-                        html.Div(hint[0], className=(
-                            "text-xs font-medium text-amber-600"
-                            if hint and hint[1] == "high" else
-                            "text-xs font-medium text-sky-700" if hint and hint[1] == "low" else
-                            "text-xs font-medium text-emerald-600")) if hint else None,
+                        # html.Div(f"Target: {target_span[0]:.1f}\u2013{target_span[1]:.1f} °C"
+                        #          if target_span else None,
+                        #          className="mt-1 text-xs text-slate-500"),
                     ), span={"base": 12, "sm": 4}),
                     # ATTENUATION & ABV (FR-20)
                     dmc.GridCol(ui.zone(
@@ -834,20 +828,20 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                             html.Span(value_text(attenuation, "%"),
                                       className="text-2xl font-semibold tabular-nums "
                                                 "text-slate-800"),
-                            html.Span("Atten", className="text-xs text-slate-500"),
                             html.Span("|", className="text-slate-300"),
                             html.Span(value_text(abv, "%"),
-                                      className="text-2xl font-semibold tabular-nums "
+                                        className="text-2xl font-semibold tabular-nums "
                                                 "text-slate-800"),
-                            html.Span("ABV", className="text-xs text-slate-500"),
                         ]),
-                        html.Div(f"Est. Final: {value_text(est_abv, '% ABV')}",
-                                 className="mt-1 text-xs text-slate-500"),
+                        # html.Span("Atten", className="text-xs text-slate-500"),
+                        # html.Span("ABV", className="text-xs text-slate-500"),
+                        # html.Div(f"Est. Final: {value_text(est_abv, '% ABV')}",
+                        #          className="mt-1 text-xs text-slate-500"),
                     ), span={"base": 12, "sm": 4}),
                 ]),
                 plot(charts.fermentation_figure(series, height=None, legend=False,
                                                 mobile=mobile),
-                     className="h-40 sm:h-52"),
+                     className="h-60 sm:h-52"),
                 # FR-01 - FR-04: the experiment controls (end / set up) of this iSpindel
                 html.Div(className="mt-3 flex flex-wrap items-center justify-between gap-2",
                          children=[

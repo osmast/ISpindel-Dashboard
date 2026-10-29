@@ -25,7 +25,7 @@ ingest:
 
 dashboard:
   host: "0.0.0.0"
-  port: 8080
+  port: 8081
   refresh_ms: 15000              # FR-14: chart refresh, must stay below 60000
   live_ms: 1000                  # countdown: re-read the latest timestamps + tick the display
   battery_warn_v: 3.5            # FR-19: warning below this voltage
