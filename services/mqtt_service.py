@@ -220,7 +220,9 @@ def on_disconnect(client, userdata, flags, reason_code, properties=None):
         log.info("[%s] connection closed (broker removed or changed)", link.label)
         return
     # paho reconnects by itself (loop_start) - log it so gaps are visible in the log
-    if not _ok(reason_code):                # a deliberate stop (reason 0) is not an error
+    if not _ok(reason_code) and not link.last_error:
+        # keep a more specific reason ("connect failed: Not authorized"): paho reports a failed
+        # connect *and* then a disconnect, and the generic text must not win over the real cause
         link.last_error = f"disconnected: {reason_code}"
     log.warning("[%s] MQTT disconnected (%s) - reconnecting", link.label, reason_code)
     broker_status(link, error=link.last_error)

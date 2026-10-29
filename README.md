@@ -109,7 +109,14 @@ iSpindel has to publish to, plus the label underneath).
   **not connected: connect failed: Not authorized** - put the user and password into the form
   (mosquitto's `allow_anonymous false`). A host that is down or in another network shows
   **not connected after 60 s - is the broker reachable?**, because a TCP-level failure never reaches
-  the MQTT layer.
+  the MQTT layer. Both texts are the full line in a tooltip; the chip shows the reason only.
+* Before trusting that, test the credentials (and what a broker carries) from the Pi - the broker
+  container brings the client tools along:
+
+  ```bash
+  podman exec ispindel_broker_1 mosquitto_sub -h 160.85.124.31 -p 1883 \
+      -u '<user>' -P '<pass>' -t 'ispindel/#' -v -W 15
+  ```
 * The host field also accepts a whole address (`160.85.124.31:1883`) - the port is taken from it.
 * Two participants may use the same iSpindel name on their own brokers - the name is unique **per
   broker**, so the two stay two devices (the Devices tab names the broker **address** of every

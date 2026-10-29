@@ -1054,6 +1054,19 @@ def broker_rows():
     return [own] + rows
 
 
+def error_text(error):
+    """The readable core of an ingest error: `connect failed: Not authorized - retrying` becomes
+    `Not authorized`. The full text stays in the tooltip - the chip only has one line."""
+    text = str(error)
+    for prefix in ("connect failed: ", "disconnected: ", "not connected: "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+    for suffix in (" - retrying",):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+    return text
+
+
 def broker_state(row):
     """The state chip of one broker row (FR-15): paused > error > delivering > silent/empty.
 
@@ -1066,11 +1079,10 @@ def broker_state(row):
     if not row["is_enabled"]:
         return ui.badge("paused", "slate")
     if row["last_error"]:
-        # the whole reason in a tooltip, a short chip in the table - "Not authorized" (the broker
-        # wants a user/password, mosquitto `allow_anonymous false`) must be readable at a glance
+        # the reason on the chip (`Not authorized`), the whole line in the tooltip
         error = str(row["last_error"])
         return dmc.Tooltip(label=error, position="top", withArrow=True, openDelay=200,
-                           children=ui.badge(f"not connected: {error[:30]}", "red"))
+                           children=ui.badge(error_text(error)[:38], "red"))
     stamps = [stamp for stamp in (row.get("last_message_at"), row.get("last_stored")) if stamp]
     if not stamps:
         return (ui.badge("connected, no data yet", "amber") if row.get("last_connected_at")

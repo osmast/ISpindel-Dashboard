@@ -144,7 +144,13 @@ main.execute("DELETE FROM mqtt_broker WHERE label = 'zz_validation_addr'")
 refused = dict(main.broker_rows()[0], last_error="connect failed: Not authorized - retrying")
 refused_chip = json.dumps(main.broker_state(refused).to_plotly_json(), default=str)
 check("FR-15 a refused connection is shown as an error with its reason",
-      "not connected" in refused_chip and "Not authorized" in refused_chip, refused_chip[:80])
+      "children='Not authorized'" in refused_chip                        # the chip itself
+      and "connect failed: Not authorized - retrying" in refused_chip,   # the tooltip keeps it all
+      refused_chip[:90])
+watchdog = dict(main.broker_rows()[0], last_error="not connected after 60 s - is the broker reachable?")
+watchdog_chip = json.dumps(main.broker_state(watchdog).to_plotly_json(), default=str)
+check("FR-15 the state chip does not repeat 'not connected'",
+      "children='not connected after 60 s" in watchdog_chip, watchdog_chip[:90])
 
 # the ingest reads that very list while it runs (services/mqtt_service.py)
 import services.mqtt_service as ingest                                      # noqa: E402
@@ -165,7 +171,7 @@ check("FR-15 a connection error survives the periodic traffic report on the brok
       kept == "connect failed: Not authorized - retrying", str(kept))
 refused_row = [r for r in main.broker_rows() if r["id"] == broker_id][0]
 check("FR-15 a refused broker shows the reason instead of 'no data yet'",
-      "not connected" in json.dumps(main.broker_state(refused_row).to_plotly_json(), default=str),
+      "Not authorized" in json.dumps(main.broker_state(refused_row).to_plotly_json(), default=str),
       str(refused_row["last_error"]))
 
 
@@ -182,6 +188,25 @@ check("FR-15 a broker that never answers is reported as unreachable",
       reach_error and "reachable" in reach_error, str(reach_error))
 check("FR-15 a listener that just started is not called unreachable yet",
       ingest.link_error(SilentLink(), grace=600) is None)
+
+
+# paho reports a refused connect *and* then a disconnect: the specific reason must win, otherwise
+# the row would only ever say "disconnected: Unspecified error"
+class FailReason:
+    value = 128                            # any non-zero code
+
+
+class RefusedLink:
+    id = None                              # no row to write -> broker_status() returns early
+    label = "zz_validation_refused"        # on_disconnect() logs it
+    stopping = False
+    last_error = "connect failed: Not authorized - retrying"
+
+
+refused_stub = RefusedLink()
+ingest.on_disconnect(None, refused_stub, None, FailReason())
+check("FR-15 a refused connect keeps its reason instead of the generic disconnect text",
+      refused_stub.last_error == "connect failed: Not authorized - retrying", refused_stub.last_error)
 
 # the same iSpindel name on another broker is its own device (never merged with the own broker's)
 main.execute("INSERT INTO device (mqtt_name) VALUES ('zz_validation') ON CONFLICT DO NOTHING")
