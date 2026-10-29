@@ -133,21 +133,29 @@ details[data-card][open]::details-content {
   animation: toast-life 10s ease-out forwards;
 }
 
-/* The pointer is the beer arrow of assets/cursor-beer.svg/png. The raster file comes first,
- * because only Chromium 122+/Edge understands an SVG cursor while Firefox and Safari fall through
- * to the image and then to the normal pointer. The hotspot 3 3 is the tip of the arrow, so a click
- * still lands where the tip points. Guarded by `pointer: fine` (NFR-06): a touch device has no
- * cursor to restyle. */
+/* The pointer of the dashboard, in two layers.
+ *
+ * 1. The static glass cursors: assets/cursor-beer.svg/png (empty glass) and
+ *    assets/cursor-beer-hover.svg/png (full glass with a head of foam) - the same glass as the live
+ *    one below, at the 32 x 32 size a cursor image wants.
+ * 2. The live glass of assets/cursor.js, which follows the mouse and fills up on hover. The script
+ *    adds `beer-cursor` to the root element as its **last** step, and that class is what hides the
+ *    native pointer - so layer 1 is what a reader without JavaScript or with reduced motion keeps
+ *    (and nothing looks half-broken if the script never runs).
+ *
+ * The raster file comes first in the chain, because only Chromium 122+/Edge understands an SVG
+ * cursor while Firefox and Safari fall through to the image and then to the normal pointer. The
+ * hotspot 7 7 is the rim of the glass, so a click lands where the drawing points. Everything here
+ * is guarded by `pointer: fine` (NFR-06): a touch device has no cursor to restyle. */
 @media (pointer: fine) {
   html {
-    cursor: url("cursor-beer.png") 3 3, url("cursor-beer.svg") 3 3, auto;
+    cursor: url("cursor-beer.png") 7 7, url("cursor-beer.svg") 7 7, auto;
   }
 
-  /* Hover stays in the theme: everything the browser would give a hand cursor gets the
-   * beer-filled arrow (assets/cursor-beer-hover.*) instead of the stock pointer. Same tip and same
-   * hotspot, so only the look changes - and it is the same set of elements that makes the trail of
-   * assets/bubbles.js fizz harder. These rules are deliberately plain CSS (not a Tailwind utility):
-   * an unlayered rule wins over the `cursor-pointer` utility the Python code puts on the rows. */
+  /* Hover stays in the theme: everything the browser would give a hand cursor gets the filled
+   * glass. Plain CSS on purpose - an unlayered rule wins over the `cursor-pointer` utility the
+   * Python code puts on the rows - and it is the same set of elements that makes the trail of
+   * assets/bubbles.js fizz harder. */
   a,
   button,
   summary,
@@ -159,7 +167,89 @@ details[data-card][open]::details-content {
   [role="checkbox"],
   [role="switch"],
   .cursor-pointer {
-    cursor: url("cursor-beer-hover.png") 3 3, url("cursor-beer-hover.svg") 3 3, pointer;
+    cursor: url("cursor-beer-hover.png") 7 7, url("cursor-beer-hover.svg") 7 7, pointer;
+  }
+}
+
+/* The live glass of assets/cursor.js. The root class comes from the script, so this only ever
+ * applies while the glass is really there; `cursor: none` on everything is the price of a custom
+ * pointer - the text I-beam of the inputs is gone with it, and the glass marks the point instead. */
+html.beer-cursor,
+html.beer-cursor * {
+  cursor: none;
+}
+
+.beer-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 34px;                 /* keep in sync with SIZE in assets/cursor.js */
+  height: 34px;
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0;                  /* shown with the first pointer movement */
+  transition: opacity 0.15s linear;
+  transform: translate3d(-100px, -100px, 0);
+  will-change: transform;
+}
+
+.beer-cursor.is-visible {
+  opacity: 1;
+}
+
+/* the liquid: a rect as tall as the glass interior, pushed out of sight at the bottom and slid up
+ * to the brim while the pointer is over something clickable. A CSS transform rather than the y and
+ * height geometry properties of the original design, because those are not supported everywhere. */
+.beer-cursor .beer-liquid {
+  transform: translateY(26px);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.beer-cursor.is-hovering .beer-liquid {
+  transform: translateY(0);
+}
+
+/* the frothy head, rising over the rim */
+.beer-cursor .beer-foam {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+}
+
+.beer-cursor.is-hovering .beer-foam {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.15s;
+}
+
+/* the CO2 rising through the glass - only while it is full */
+.beer-cursor .beer-cursor-bubble {
+  opacity: 0;
+}
+
+.beer-cursor.is-hovering .beer-cursor-bubble {
+  animation: cursor-fizz 2.4s linear infinite;
+}
+
+.beer-cursor .beer-cursor-bubble:nth-of-type(2) {
+  animation-delay: 0.7s;
+}
+
+.beer-cursor .beer-cursor-bubble:nth-of-type(3) {
+  animation-delay: 1.4s;
+}
+
+@keyframes cursor-fizz {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
   }
 }
 

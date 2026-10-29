@@ -1,36 +1,45 @@
-<!-- The pointer while it is over something clickable: the same arrow, but filled like a glass of
-     beer - the amber body with a white head of foam on top and the bubbles of assets/bubbles.js
-     at its tail. Same tip and same hotspot (3 3) as `cursor-beer.svg`, so the affordance does not
-     change; only the look does. Decoration - no FR/NFR asks for a custom pointer (NFR-05 is about
-     the language of the UI), so no requirement id is named here.
-     `cursor-beer-hover.png` is the raster twin (rsvg-convert, 32x32) for Firefox and Safari. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+<!-- The fallback pointer while it IS over something clickable: the same glass, filled to the brim
+     with a frothy head - the static twin of what assets/cursor.js animates while the live pointer is
+     over a button, link or row (see assets/cursor-beer.svg for the empty state and the hotspot 7 7).
+     Only used when the live pointer stands down (no JavaScript, or reduced motion). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
   <defs>
-    <linearGradient id="beer" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F7B733"/>
-      <stop offset="1" stop-color="#D98220"/>
-    </linearGradient>
-    <clipPath id="pointer">
-      <path d="M3 3 L3 21 L8.5 15.8 L12.2 23.6 L15.4 22.1 L11.8 14.4 L19 14.4 Z"/>
+    <clipPath id="glass-inner">
+      <path d="M8 8 H18.7 L17.3 25.3 C17.3 26.1 16.7 26.7 16 26.7 H10.7 C9.9 26.7 9.3 26.1 9.3 25.3 Z"/>
     </clipPath>
+    <linearGradient id="beer" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E67E22"/>
+      <stop offset="60%" stop-color="#F39C12"/>
+      <stop offset="100%" stop-color="#F1C40F"/>
+    </linearGradient>
   </defs>
 
-  <!-- the fizz that comes up until the pointer leaves the element again -->
-  <circle cx="25" cy="26" r="4" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
-          stroke-width="1.2"/>
-  <circle cx="29.5" cy="21" r="2.4" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
-          stroke-width="1.1"/>
-  <circle cx="24" cy="18" r="1.5" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
-          stroke-width="1"/>
+  <!-- the handle -->
+  <path d="M18 10.7 H22 C23.5 10.7 24.7 11.9 24.7 13.3 V18.7 C24.7 20.1 23.5 21.3 22 21.3 H17.3"
+        stroke="#0057B7" stroke-width="2.2" stroke-linecap="round"/>
 
-  <!-- the arrow, painted as beer: foam on top, amber below, CO2 rising through it -->
-  <g clip-path="url(#pointer)">
-    <rect x="0" y="0" width="32" height="32" fill="url(#beer)"/>
-    <rect x="0" y="0" width="32" height="11" fill="#FFFFFF"/>
-    <circle cx="8" cy="17" r="1.7" fill="#FFFFFF" opacity="0.92"/>
-    <circle cx="13" cy="20.5" r="1.1" fill="#FFFFFF" opacity="0.92"/>
-    <circle cx="6.5" cy="20" r="0.9" fill="#FFFFFF" opacity="0.92"/>
+  <!-- the glass itself -->
+  <path d="M7.3 6.7 H19.3 L17.9 25.5 C17.8 26.5 16.9 27.3 15.8 27.3 H10.9 C9.8 27.3 8.9 26.5 8.8 25.5 Z"
+        fill="#FFFFFF" fill-opacity="0.9"/>
+
+  <!-- the beer: up to the rim this time, with CO2 rising through it -->
+  <g clip-path="url(#glass-inner)">
+    <rect x="8" y="7" width="11" height="20" fill="url(#beer)"/>
+    <circle cx="11" cy="20" r="0.7" fill="#FFFFFF" opacity="0.85"/>
+    <circle cx="14.7" cy="14.7" r="0.9" fill="#FFFFFF" opacity="0.85"/>
+    <circle cx="12" cy="11.3" r="0.6" fill="#FFFFFF" opacity="0.85"/>
   </g>
-  <path d="M3 3 L3 21 L8.5 15.8 L12.2 23.6 L15.4 22.1 L11.8 14.4 L19 14.4 Z" fill="none"
+
+  <!-- the outline and its reflection -->
+  <path d="M7.3 6.7 H19.3 L17.9 25.5 C17.8 26.5 16.9 27.3 15.8 27.3 H10.9 C9.8 27.3 8.9 26.5 8.8 25.5 Z"
         stroke="#0057B7" stroke-width="1.7" stroke-linejoin="round"/>
+  <line x1="9.7" y1="9.3" x2="10.3" y2="24" stroke="#0057B7" stroke-width="0.9" opacity="0.4"/>
+
+  <!-- the frothy head, over the rim -->
+  <path d="M6.7 7.3 C6 7.3 5.3 6.3 6 5.3 C6.5 4.5 7.7 4.7 8 5.3 C8.5 4 10 4 10.7 5 C11.3 4 13 4 13.7 5
+           C14.3 4 16 4 16.7 5 C17.3 4.3 18.7 4.7 19 5.3 C19.7 6.3 19 7.3 18.3 7.3 Z"
+        fill="#FFFFFF" stroke="#0057B7" stroke-width="0.8" stroke-linejoin="round"/>
+
+  <!-- the exact click point (the hotspot) -->
+  <circle cx="7.3" cy="6.7" r="1.5" fill="#0057B7" stroke="#FFFFFF" stroke-width="0.9"/>
 </svg>

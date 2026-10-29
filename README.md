@@ -360,8 +360,8 @@ components/ui.py          reusable Tailwind layout components
 components/charts.py      Plotly fermentation charts
 services/db.py            tiny PostgreSQL helper
 services/mqtt_service.py  MQTT -> PostgreSQL: assembles the 7 messages into one row
-assets/                   Dash-served: tailwind.css, card_state.js, bubbles.js, the beer tab icon and
-                          the two beer pointers (idle + hover), fonts/; package.json builds the CSS
+assets/                   Dash-served: tailwind.css, card_state.js, bubbles.js, cursor.js, the beer
+                          tab icon and the glass cursors, fonts/; package.json builds the CSS
 sql/schema.sql            schema, keys, views (incl. `mqtt_broker` for the FR-15 brokers); on first start
 sql/migrations/           view/constraint migrations for a database that already exists
 tools/                    self-tests and simulators
@@ -375,11 +375,17 @@ deploy/systemd/           boot step + nightly backup timer for the Raspberry Pi
 The comments in the code name the requirement they implement (`FR-01` ... `FR-22`, `NFR-01` ...
 `NFR-09`), which come from the assignment specification. Code: **MIT** (see `LICENSE`). The
 bundled IBM XGA-AI fonts are **CC BY-SA 4.0** by VileR, full licence text in
-`assets/fonts/LICENSE-oldschool-pc-font-pack.txt`. The beer tab icon (`assets/favicon-beer.svg`)
-and the two beer pointers (`assets/cursor-beer.svg` / `.png` idle, `assets/cursor-beer-hover.svg`
-/ `.png` while hovering something clickable) are drawn for this project and are covered by the MIT
-licence of the code. The bubble trail (`assets/bubbles.js` + the plain-CSS part of
+`assets/fonts/LICENSE-oldschool-pc-font-pack.txt`. The beer tab icon (`assets/favicon-beer.svg`) and
+the beer glass of the pointer (`assets/cursor-beer.svg` + `.png` empty, `assets/cursor-beer-hover.svg`
++ `.png` full, and the live one drawn by `assets/cursor.js`) are made for this project and are
+covered by the MIT licence of the code. The bubble trail (`assets/bubbles.js` + the plain-CSS part of
 `assets/input.pcss`) is part of the project as well.
+
+**How the pointer works:** a cursor *image* can only be swapped on hover, it cannot be animated, so
+the glass that follows the mouse and fills up over a button is a DOM element (`assets/cursor.js`).
+While that script runs it hides the native pointer - which also costs the text I-beam of the inputs -
+and the static glass cursors of `input.pcss` are the fallback for a touch device
+(`pointer: fine`, NFR-06) and for reduced motion.
 
 The tab icon and the pointer are decoration: no FR/NFR asks for them (the closest hooks are
 NFR-06 - a touch device gets neither - and the reduced-motion rule the panels already follow),
