@@ -587,6 +587,43 @@ check("the dialog cannot close itself out of sync (no X / outside / Esc)",
       str({k: modal_props.get(k) for k in
            ("opened", "withCloseButton", "closeOnClickOutside", "closeOnEscape")}))
 
+
+# Every Input/State id of every callback must exist in the **initial** layout: dash-renderer looks
+# them up when it wires a callback and otherwise logs "ID not found in layout" and never sends a
+# request - the callback is dead in the browser. Nothing server-side can see that (this file posts
+# to /_dash-update-component by hand and check_requirements.py calls the functions directly), so the
+# trap needs its own test. It bit the FR-15 broker dialog: its form lived in an empty hidden div,
+# exactly what the device form of FR-12 documents - forms belong in the static layout.
+def layout_ids(root):
+    """Every string id the initial layout renders."""
+    found = set()
+
+    def walk(node):
+        if hasattr(node, "to_plotly_json"):
+            node = node.to_plotly_json()
+        if isinstance(node, dict):
+            node_id = node.get("id")
+            if isinstance(node_id, str):
+                found.add(node_id)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                walk(value)
+
+    walk(root)
+    return found
+
+
+wired = {entry["id"] for spec in main.app._callback_list for group in ("inputs", "state")
+         for entry in spec.get(group, [])
+         # wildcard ids arrive as JSON strings ({"device":["ALL"],...}): they are matched against
+         # the components rendered at request time, never against the initial layout
+         if isinstance(entry["id"], str) and not entry["id"].startswith("{")}
+missing = sorted(wired - layout_ids(main.app.layout))
+check("every callback Input/State id exists in the initial layout (no 'ID not found in layout')",
+      not missing, f"{len(wired)} wired ids, missing: {missing}")
+
 # ---- 12. FR-12: the Devices table + its settings dialog ----------------------
 # The Devices table manages the `device` master data (the values the ingest created on the first
 # message). The dialog reuses the experiment modal with a different form, so the same `post()` works.

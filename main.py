@@ -112,6 +112,52 @@ def device_form(values=None, disabled=False):
 
 
 
+def broker_form(values=None):
+    """The fields of the FR-15 broker dialog - defined **above** `layout()` on purpose: the static
+    layout renders it as the initial children of `#broker-form`, because Dash validates a callback's
+    State ids against the layout at import time (the same reason `experiment_form` and the FR-12
+    `device_form` live here). `None` = an empty form for "Add broker", a row = edit."""
+    v = values or {}
+    return html.Div(className="grid gap-4 md:grid-cols-2", children=[
+        ui.field("Label (unique, shown in the dashboard)",
+                 dcc.Input(id="broker-label", type="text", value=v.get("label"),
+                           placeholder="Mueller Pi",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Host (name or IP address)",
+                 dcc.Input(id="broker-host", type="text", value=v.get("host"),
+                           placeholder="160.85.142.77",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Port",
+                 dcc.Input(id="broker-port", type="number", value=v.get("port") or 1883,
+                           placeholder="1883",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Topic prefix",
+                 dcc.Input(id="broker-prefix", type="text",
+                           value=v.get("topic_prefix") or "ispindel", placeholder="ispindel",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("User (empty = anonymous)",
+                 dcc.Input(id="broker-user", type="text", value=v.get("username"),
+                           placeholder="ispindel",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Password",
+                 dcc.Input(id="broker-password", type="password", value=v.get("password"),
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("State - a paused broker records nothing",
+                 dcc.Checklist(id="broker-enabled",
+                               options=[{"label": " listen on this broker", "value": "on"}],
+                               value=["on"] if v.get("is_enabled", True) else [],
+                               className="flex flex-wrap gap-3 text-sm",
+                               labelClassName="flex min-h-11 cursor-pointer items-center")),
+    ])
+
+
+
 # Dash links every .css/.js under assets/ automatically. `assets_ignore` matches file names
 # (skip the Tailwind source input.pcss); `assets_path_ignore` matches path levels (skip
 # node_modules, the npm install that builds the CSS - it is full of package stylesheets).
@@ -224,7 +270,11 @@ def layout():
             children=[
                 html.Div(id="broker-msg", className="mb-3"),
                 html.Div(id="broker-list", className="mb-3"),
-                html.Div(id="broker-form", style={"display": "none"}),
+                # the form is in the static layout from the start (hidden until "Add broker"): Dash
+                # validates a callback's State ids against the *initial* layout, so an empty div
+                # here leaves the whole dialog dead in the browser ("ID not found in layout") -
+                # the same trap the device form of FR-12 already documented.
+                html.Div(id="broker-form", style={"display": "none"}, children=broker_form()),
                 html.Div(className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end",
                          children=[
                     ui.button("broker-cancel", "Close", tone="light",
@@ -1011,46 +1061,9 @@ def broker_table(rows):
     return ui.table(BROKER_HEADERS, body, empty="no broker configured")
 
 
-def broker_form(values=None):
-    """The fields of the broker dialog (FR-15): where the other iSpindels publish."""
-    v = values or {}
-    return html.Div(className="grid gap-4 md:grid-cols-2", children=[
-        ui.field("Label (unique, shown in the dashboard)",
-                 dcc.Input(id="broker-label", type="text", value=v.get("label"),
-                           placeholder="Mueller Pi",
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("Host (name or IP address)",
-                 dcc.Input(id="broker-host", type="text", value=v.get("host"),
-                           placeholder="160.85.142.77",
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("Port",
-                 dcc.Input(id="broker-port", type="number", value=v.get("port") or 1883,
-                           placeholder="1883",
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("Topic prefix",
-                 dcc.Input(id="broker-prefix", type="text",
-                           value=v.get("topic_prefix") or "ispindel", placeholder="ispindel",
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("User (empty = anonymous)",
-                 dcc.Input(id="broker-user", type="text", value=v.get("username"),
-                           placeholder="ispindel",
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("Password",
-                 dcc.Input(id="broker-password", type="password", value=v.get("password"),
-                           className="w-full rounded-lg corner-squircle border border-slate-300 "
-                                     "px-3 py-2")),
-        ui.field("State - a paused broker records nothing",
-                 dcc.Checklist(id="broker-enabled",
-                               options=[{"label": " listen on this broker", "value": "on"}],
-                               value=["on"] if v.get("is_enabled", True) else [],
-                               className="flex flex-wrap gap-3 text-sm",
-                               labelClassName="flex min-h-11 cursor-pointer items-center")),
-    ])
+# (the FR-15 broker form is defined above, next to experiment_form/device_form: the static layout
+#  renders it as the initial children of `#broker-form`, and Dash validates the callback's State
+#  ids against the layout as it exists at import time - a form created only on click is dead.)
 
 
 def broker_values(broker_id):
