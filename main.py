@@ -129,6 +129,12 @@ def layout():
         html.Div(id="msg", className="pointer-events-none fixed right-0 top-0 z-50 flex "
                                      "w-full max-w-sm flex-col gap-2 p-4"),
 
+        # FR-15: during the fermentation phase the participants run their own brokers - this small
+        # button opens the dialog that adds them (and shows which of them really deliver).
+        html.Div(className="flex items-center justify-end", children=[
+            ui.button("broker-open", "MQTT brokers", tone="light", compact=True),
+        ]),
+
         # FR-13 / FR-19: the iSpindel overview. It has no container box - the cards stand alone
         # on the page background (update_dashboard() replaces the children with a dmc.Grid).
         html.Div(id="devices"),
@@ -207,10 +213,33 @@ def layout():
                 ]),
             ]),
 
+        # FR-15: the broker dialog. Same shape as the experiment dialog - the static shell holds
+        # the list and the form, the callback only opens it and writes through it.
+        dcc.Store(id="broker-target", data=None),
+        dcc.Store(id="broker-reload", data=0),
+        dmc.Modal(
+            id="broker-modal", title="MQTT brokers", opened=False, centered=True, size="lg",
+            # closed through its buttons only - a self-closing modal leaves Dash's `opened` True
+            withCloseButton=False, closeOnClickOutside=False, closeOnEscape=False,
+            children=[
+                html.Div(id="broker-msg", className="mb-3"),
+                html.Div(id="broker-list", className="mb-3"),
+                html.Div(id="broker-form", style={"display": "none"}),
+                html.Div(className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end",
+                         children=[
+                    ui.button("broker-cancel", "Close", tone="light",
+                              extra="w-full sm:w-auto"),
+                    ui.button("broker-add", "Add broker", tone="grey",
+                              extra="w-full sm:w-auto"),
+                    ui.button("broker-submit", "Save broker", extra="w-full sm:w-auto"),
+                ]),
+            ]),
+
         dcc.Interval(id="tick", interval=REFRESH),
         dcc.Interval(id="tick1s", interval=LIVE),
-        # device name -> {"last", "due"} epochs, written by update_device_times, rendered as
-        # "last: 12 s ago · upcoming: in 12 s" by the clientside callback below
+        # device id -> {"last", "due"} epochs, written by update_device_times, rendered as
+        # "last: 12 s ago · upcoming: in 12 s" by the clientside callback below (the id and not
+        # the name: FR-15 - two brokers may carry an iSpindel with the same name)
         dcc.Store(id="device_times", data={}),
         # {"mobile": bool}, written by the viewport callback, used to drop the legend (NFR-06)
         dcc.Store(id="viewport", data={}),
@@ -362,14 +391,15 @@ def update_dashboard(_, __, viewport, selected, open_cards):
 @app.callback(Output("device_times", "data"), Input("tick1s", "n_intervals"))
 def update_device_times(_):
     """Last measurement and next transmission per device, as absolute epochs - a tiny query that
-    can run every `dashboard.live_ms`. The browser turns them into relative text."""
+    can run every `dashboard.live_ms`. The browser turns them into relative text. Keyed by the
+    device id (FR-15: the iSpindel name is not unique across brokers)."""
     times = {}
-    for row in query("SELECT mqtt_name, recorded_at, interval_s FROM v_device_latest"):
+    for row in query("SELECT device_id, recorded_at, interval_s FROM v_device_latest"):
         last, interval = row["recorded_at"], row["interval_s"]
         if last is None:
-            times[row["mqtt_name"]] = {"last": None, "due": None}
+            times[row["device_id"]] = {"last": None, "due": None}
             continue
-        times[row["mqtt_name"]] = {
+        times[row["device_id"]] = {
             "last": last.timestamp(),
             "due": (last + timedelta(seconds=interval)).timestamp() if interval else None,
         }
@@ -413,10 +443,10 @@ def ispindel_overview(open_cards=None, mobile=False, host=""):
     `mobile` comes from the `viewport` store (NFR-06); `host` fills the empty-state hint."""
     open_cards = open_cards or {}
     rows = query("""SELECT l.device_id, l.mqtt_name, l.recorded_at, l.tilt_deg, l.temp_c,
-                           l.gravity_plato, l.battery_v, l.interval_s, l.rssi_dbm
+                           l.gravity_plato, l.battery_v, l.interval_s, l.rssi_dbm, l.broker_label
                     FROM v_device_latest l JOIN device d ON d.id = l.device_id
                     WHERE d.is_active
-                    ORDER BY l.mqtt_name""")
+                    ORDER BY l.broker_label NULLS FIRST, l.mqtt_name""")
     if not rows:
         return mqtt_hint(host)
     history = query("""SELECT device_id, recorded_at,
@@ -438,7 +468,7 @@ def ispindel_overview(open_cards=None, mobile=False, host=""):
         rows = rows[:1] * DEV_REPEAT
     # `slot` only exists so the repeated cards get unique ids
     cards = [device_card(row, by_device.get(row["device_id"], []), slot,
-                         open_cards.get(f"{row['mqtt_name']}#{slot}", False),
+                         open_cards.get(f"{row['device_id']}#{slot}", False),
                          active.get(row["device_id"]), mobile)
              for slot, row in enumerate(rows)]
     # 12 columns: one card per row on a phone, two from md, three only from xxl (1536px)
@@ -628,6 +658,10 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
     due = None if (last_epoch is None or not latest["interval_s"]) else \
         last_epoch + latest["interval_s"]
     name = latest["mqtt_name"]
+    # FR-15: the identity in the DOM is the device id, not the name - two participants may use the
+    # same iSpindel name on their own brokers, and the buttons have to resolve the right device.
+    device_id = latest["device_id"]
+    broker = latest.get("broker_label")   # None = the broker of config.yml, nothing to show
     # FR-04/FR-13: a running card wears the experiment name, the iSpindel name moves to the footer
     running = bool(batch)
     heading = batch["name"] if running else name
@@ -645,9 +679,9 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
     hint = temp_hint(temp, target_span)
     return html.Details(
         # `id` gives React a stable key so a remount keeps `open` (restored from `open_cards`)
-        id={"type": "card", "device": name, "slot": slot},
+        id={"type": "card", "device": device_id, "slot": slot},
         open=is_open,
-        **{"data-card": f"{name}#{slot}"},
+        **{"data-card": f"{device_id}#{slot}"},
         # `group` is needed by the `group-open:` variants inside; a running experiment gets the
         # thicker outline plus a ring (FR-04).
         className=("group rounded-xl corner-squircle border-2 border-brand bg-white transition-colors "
@@ -759,18 +793,20 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                     ]) if running else
                     html.Span("no experiment yet", className="text-xs text-slate-400"),
                     # the id keys must match the callback pattern exactly, or the click does nothing
-                    ui.button({"type": "end-btn", "device": name, "slot": slot},
+                    ui.button({"type": "end-btn", "device": device_id, "slot": slot},
                               "End experiment", tone="danger", compact=True) if running else
-                    ui.button({"type": "setup-btn", "device": name, "slot": slot},
+                    ui.button({"type": "setup-btn", "device": device_id, "slot": slot},
                               "Set up experiment", tone="grey", compact=True),
                 ]),
                 html.Div(className="mt-2 flex flex-wrap items-center justify-between "
                                    "gap-x-3 gap-y-1 text-xs text-slate-400", children=[
                     html.Span(f"tilt {ui.num(latest['tilt_deg'], 1)}° · "
                               f"RSSI {ui.num(latest['rssi_dbm'], 0)} dBm · "
-                              f"interval {ui.num(latest['interval_s'], 0)} s"),
+                              f"interval {ui.num(latest['interval_s'], 0)} s"
+                              # FR-15: which broker this iSpindel publishes to (empty for our own)
+                              + (f" · {broker}" if broker else "")),
                     # FR-13/FR-14: time of the last measurement, its age, the next transmission
-                    html.Span(id={"type": "times", "device": name, "slot": slot},
+                    html.Span(id={"type": "times", "device": device_id, "slot": slot},
                               className="tabular-nums",
                               title="time of the last measurement, its age and the next "
                                     "transmission (FR-13 / FR-14, local time)",
@@ -838,8 +874,8 @@ def experiment_table(rows, selected=(), empty="no data yet"):
 
 
 # FR-12: the device master data. A new iSpindel appears automatically (created by the ingest).
-DEVICE_HEADERS = ["Name (MQTT topic)", "Display name", "Status", "First seen", "Last measurement",
-                  "Interval", "Measurements", "Actions"]
+DEVICE_HEADERS = ["Name (MQTT topic)", "Broker", "Display name", "Status", "First seen",
+                  "Last measurement", "Interval", "Measurements", "Actions"]
 
 
 def device_actions(device_id):
@@ -854,20 +890,25 @@ def device_actions(device_id):
 
 
 def device_rows():
-    """One row per device: the master data plus what its latest measurement reported."""
+    """One row per device: the master data plus what its latest measurement reported.
+
+    FR-15: the broker of every device is part of the row - the iSpindel name alone does not
+    identify a device any more once several brokers are in play.
+    """
     return query("""SELECT d.id, d.mqtt_name, d.display_name, d.is_active, d.first_seen_at,
-                           l.recorded_at AS last_seen, l.interval_s,
+                           l.recorded_at AS last_seen, l.interval_s, l.broker_label,
                            (SELECT count(*) FROM measurement m
                             WHERE m.device_id = d.id) AS measurements
                     FROM device d
                     LEFT JOIN v_device_latest l ON l.device_id = d.id
-                    ORDER BY d.mqtt_name""")
+                    ORDER BY l.broker_label NULLS FIRST, d.mqtt_name""")
 
 
 def device_table(rows, host=""):
     """The FR-12 device overview: every iSpindel the system knows, with its settings action.
     The empty state is the same "where to point an iSpindel" hint as the FR-13 overview."""
     body = [[html.Span(r["mqtt_name"]),
+             r["broker_label"] or "config.yml",          # FR-15: NULL = the broker of config.yml
              r["display_name"] or "-",
              ui.badge("in use", "green") if r["is_active"] else ui.badge("ignored", "slate"),
              f"{local(r['first_seen_at']):%d. %b %y %H:%M}",
@@ -899,6 +940,197 @@ def update_device(device_id, display_name, active):
             (name, bool(active), device_id))
     state = "in use" if active else "ignored"
     return ui.alert(f"iSpindel '{values['mqtt_name']}' saved - {state} (FR-12)", "green"), 1
+
+
+# FR-15: the brokers of the other iSpindels in use. The **own** broker is not stored anywhere -
+# it stays in config.yml (NFR-08) - so the dialog renders it as the first, read-only row.
+BROKER_HEADERS = ["Broker", "Address", "Topic prefix", "iSpindels", "State", "Actions"]
+
+
+def broker_rows():
+    """Every broker the ingest listens on (FR-15): config.yml first, then the added ones."""
+    own = {"id": None, "label": "own broker (config.yml)", "is_config": True, "is_enabled": True,
+           "host": CFG["mqtt"]["host"], "port": CFG["mqtt"]["port"],
+           "topic_prefix": CFG["mqtt"]["topic_prefix"], "last_connected_at": None,
+           "last_message_at": None, "last_error": None,
+           "devices": query("SELECT count(*) AS n FROM device WHERE broker_id IS NULL")[0]["n"]}
+    rows = query("""SELECT b.id, b.label, b.host, b.port, b.topic_prefix, b.is_enabled,
+                           b.last_connected_at, b.last_message_at, b.last_error,
+                           (SELECT count(*) FROM device d WHERE d.broker_id = b.id) AS devices
+                    FROM mqtt_broker b ORDER BY b.label""")
+    for row in rows:
+        row["is_config"] = False
+    return [own] + rows
+
+
+def broker_state(row):
+    """The state chip of one broker row: paused > error > delivering > silent (FR-15).
+
+    The values come from the ingest, which writes connection state and traffic back into
+    `mqtt_broker` - so the dialog shows whether the other participant's broker really delivers.
+    """
+    if not row["is_enabled"]:
+        return ui.badge("paused", "slate")
+    if row["last_error"]:
+        return ui.badge(row["last_error"][:38], "red")
+    last = row.get("last_message_at")
+    if last is None:
+        return ui.badge("no message yet", "amber")
+    age = (datetime.now(timezone.utc) - last).total_seconds()
+    if age < 300:
+        return ui.badge(f"delivering ({age:.0f} s ago)", "green")
+    return ui.badge(f"silent since {local(last):%d.%m. %H:%M}", "amber")
+
+
+def broker_actions(row):
+    """pause/resume, edit and delete of one broker row - the own broker has no row to change."""
+    if row["is_config"]:
+        return html.Span("config.yml", className="text-xs text-slate-400")
+
+    def icon(kind, icon_name, label, colour):
+        return dmc.Tooltip(
+            label=label, position="top", withArrow=True, openDelay=300,
+            children=dmc.ActionIcon(
+                DashIconify(icon=icon_name, width=15),
+                id={"type": "broker-btn", "broker": row["id"], "mode": kind},
+                variant="subtle", color=colour, size="sm", radius="md",
+                **{"aria-label": f"{label} broker"}))
+
+    return html.Div(className="flex items-center gap-1", children=[
+        icon("toggle", "tabler:player-pause" if row["is_enabled"] else "tabler:player-play",
+             "pause" if row["is_enabled"] else "resume", "gray"),
+        icon("edit", "tabler:pencil", "edit", "gray"),
+        icon("delete", "tabler:trash", "delete", "red"),
+    ])
+
+
+def broker_table(rows):
+    """The FR-15 list inside the dialog: one row per broker with its live state."""
+    body = [[html.Span(r["label"]), f"{r['host']}:{r['port']}", r["topic_prefix"],
+             str(r["devices"]), broker_state(r), broker_actions(r)] for r in rows]
+    return ui.table(BROKER_HEADERS, body, empty="no broker configured")
+
+
+def broker_form(values=None):
+    """The fields of the broker dialog (FR-15): where the other iSpindels publish."""
+    v = values or {}
+    return html.Div(className="grid gap-4 md:grid-cols-2", children=[
+        ui.field("Label (unique, shown in the dashboard)",
+                 dcc.Input(id="broker-label", type="text", value=v.get("label"),
+                           placeholder="Mueller Pi",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Host (name or IP address)",
+                 dcc.Input(id="broker-host", type="text", value=v.get("host"),
+                           placeholder="160.85.142.77",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Port",
+                 dcc.Input(id="broker-port", type="number", value=v.get("port") or 1883,
+                           placeholder="1883",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Topic prefix",
+                 dcc.Input(id="broker-prefix", type="text",
+                           value=v.get("topic_prefix") or "ispindel", placeholder="ispindel",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("User (empty = anonymous)",
+                 dcc.Input(id="broker-user", type="text", value=v.get("username"),
+                           placeholder="ispindel",
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("Password",
+                 dcc.Input(id="broker-password", type="password", value=v.get("password"),
+                           className="w-full rounded-lg corner-squircle border border-slate-300 "
+                                     "px-3 py-2")),
+        ui.field("State - a paused broker records nothing",
+                 dcc.Checklist(id="broker-enabled",
+                               options=[{"label": " listen on this broker", "value": "on"}],
+                               value=["on"] if v.get("is_enabled", True) else [],
+                               className="flex flex-wrap gap-3 text-sm",
+                               labelClassName="flex min-h-11 cursor-pointer items-center")),
+    ])
+
+
+def broker_values(broker_id):
+    """The dialog's values of one broker, or None when the row is gone (FR-15)."""
+    rows = query("""SELECT label, host, port, topic_prefix, username, password, is_enabled
+                    FROM mqtt_broker WHERE id = %s""", (broker_id,))
+    return rows[0] if rows else None
+
+
+def save_broker(broker_id, label, host, port, prefix, username, password, enabled):
+    """Insert (broker_id None) or update one broker. Returns (alert, reload_delta) - FR-15."""
+    label, host = (label or "").strip(), (host or "").strip()
+    if not label or not host:
+        return ui.alert("a broker needs a label and a host (FR-15)", "amber"), 0
+    try:
+        port = int(port or 1883)
+    except (TypeError, ValueError):
+        return ui.alert("the port must be a number like 1883", "amber"), 0
+    values = {"label": label, "host": host, "port": port,
+              "topic_prefix": (prefix or "").strip() or "ispindel",
+              "username": (username or "").strip() or None,
+              "password": (password or "").strip() or None,
+              "enabled": bool(enabled)}
+    refresh = CFG["ingest"]["broker_refresh_seconds"]
+    try:
+        if broker_id is None:
+            execute("""INSERT INTO mqtt_broker (label, host, port, topic_prefix, username,
+                                                password, is_enabled)
+                       VALUES (%(label)s, %(host)s, %(port)s, %(topic_prefix)s, %(username)s,
+                               %(password)s, %(enabled)s)""", values)
+            return ui.alert(f"broker '{label}' added - the ingest connects within {refresh} s "
+                            f"(FR-15)", "green"), 1
+        values["id"] = broker_id
+        execute("""UPDATE mqtt_broker SET label = %(label)s, host = %(host)s, port = %(port)s,
+                          topic_prefix = %(topic_prefix)s, username = %(username)s,
+                          password = %(password)s, is_enabled = %(enabled)s,
+                          last_error = NULL          -- the old failure does not belong to this
+                      WHERE id = %(id)s""", values)
+        return ui.alert(f"broker '{label}' saved - the ingest reconnects within {refresh} s "
+                        f"(FR-15)", "green"), 1
+    except psycopg.errors.UniqueViolation:
+        return ui.alert(f"a broker named '{label}' exists already (FR-15)", "amber"), 0
+    except psycopg.Error as exc:
+        return ui.alert(f"database error: {exc}", "red"), 0
+
+
+def delete_broker(broker_id):
+    """Delete a broker together with everything it delivered. Returns (alert, reload_delta).
+
+    `measurement` and `experiment` reference `device` without a cascade, so the rows of that
+    broker's iSpindels go first - measurements, then experiments, then the devices (FR-15).
+    """
+    rows = query("""SELECT b.label,
+                           (SELECT count(*) FROM device d WHERE d.broker_id = b.id) AS devices,
+                           (SELECT count(*) FROM measurement m JOIN device d ON d.id = m.device_id
+                             WHERE d.broker_id = b.id) AS measurements
+                    FROM mqtt_broker b WHERE b.id = %s""", (broker_id,))
+    if not rows:
+        return ui.alert("that broker no longer exists", "amber"), 0
+    row = rows[0]
+    execute("""DELETE FROM measurement WHERE device_id IN
+                 (SELECT id FROM device WHERE broker_id = %s)""", (broker_id,))
+    execute("""DELETE FROM experiment WHERE device_id IN
+                 (SELECT id FROM device WHERE broker_id = %s)""", (broker_id,))
+    execute("DELETE FROM device WHERE broker_id = %s", (broker_id,))
+    execute("DELETE FROM mqtt_broker WHERE id = %s", (broker_id,))
+    return ui.alert(f"broker '{row['label']}' deleted, with its {row['devices']} iSpindels and "
+                    f"{row['measurements']} measurements", "green"), 1
+
+
+def toggle_broker(broker_id):
+    """Pause / resume one broker (FR-15): the ingest stops or starts listening within one pass."""
+    rows = query("SELECT label, is_enabled FROM mqtt_broker WHERE id = %s", (broker_id,))
+    if not rows:
+        return ui.alert("that broker no longer exists", "amber"), 0
+    enabled = not rows[0]["is_enabled"]
+    execute("UPDATE mqtt_broker SET is_enabled = %s, last_error = NULL WHERE id = %s",
+            (enabled, broker_id))
+    return ui.alert(f"broker '{rows[0]['label']}' "
+                    f"{'resumed' if enabled else 'paused'} (FR-15)", "green"), 1
 
 
 
@@ -1034,10 +1266,11 @@ def active_experiment(device):
 
 
 def experiment_device(exp_id):
-    """The iSpindel name of an experiment id - an FR-05 row ends it by device (FR-04)."""
-    rows = query("""SELECT d.mqtt_name FROM experiment e JOIN device d ON d.id = e.device_id
+    """The device id of an experiment - an FR-05 row ends it by device (FR-04). The id and not the
+    name: two brokers may carry an iSpindel with the same name (FR-15)."""
+    rows = query("""SELECT d.id FROM experiment e JOIN device d ON d.id = e.device_id
                     WHERE e.id = %s""", (exp_id,))
-    return rows[0]["mqtt_name"] if rows else None
+    return rows[0]["id"] if rows else None
 
 
 def experiment_form_values(exp_id):
@@ -1137,7 +1370,7 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
     """One callback for everything that writes `exp-modal.opened` (Dash allows one callback per
     output): open the dialog, create, edit, delete, cancel, end, plus the csv row action (FR-21;
     the chart action is swallowed here and handled by `toggle_chart`, FR-17). `exp-target` holds
-    the current job: {"mode": create|end, "device": name} or {"mode": edit|delete|device, "id": id}.
+    the current job: {"mode": create|end, "device": id} or {"mode": edit|delete|device, "id": id}.
     Validation errors go into the dialog (`modal-msg`), successes to a page toast."""
     reload_data = reload_data or 0
     triggered = ctx.triggered_id
@@ -1251,6 +1484,112 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
         return opened({"mode": "device", "id": triggered.get("device")},
                       "Device settings", "Save device", device_form(values), device=True)
     return nothing()
+
+
+# FR-15: the broker dialog. One callback for everything that writes `broker-modal.opened` (Dash
+# allows one callback per output): open, add, edit, delete, pause/resume, close. The list has a
+# callback of its own below, so a refresh never resets the form the user is typing in.
+@app.callback(Output("broker-target", "data"), Output("broker-modal", "opened"),
+              Output("broker-modal", "title"), Output("broker-submit", "children"),
+              Output("broker-form", "children"), Output("broker-form", "style"),
+              Output("broker-msg", "children"), Output("broker-reload", "data"),
+              Input("broker-open", "n_clicks"), Input("broker-add", "n_clicks"),
+              Input("broker-cancel", "n_clicks"), Input("broker-submit", "n_clicks"),
+              Input({"type": "broker-btn", "broker": ALL, "mode": ALL}, "n_clicks"),
+              State("broker-target", "data"), State("broker-reload", "data"),
+              State("broker-label", "value"), State("broker-host", "value"),
+              State("broker-port", "value"), State("broker-prefix", "value"),
+              State("broker-user", "value"), State("broker-password", "value"),
+              State("broker-enabled", "value"),
+              State({"type": "broker-btn", "broker": ALL, "mode": ALL}, "id"),
+              prevent_initial_call=True)
+def broker_action(open_clicks, add_clicks, _, submit_clicks, row_clicks, target, reload_data,
+                  label, host, port, prefix, user, password, enabled, row_ids):
+    """One callback for the whole FR-15 dialog: open it, add a broker, edit, delete, pause/resume.
+
+    `broker-target` holds the open job ({"mode": create|edit|delete, "id": <broker id or None>}).
+    Validation errors stay inside the dialog (`broker-msg`); a write returns to the list and bumps
+    `broker-reload`, which re-renders it. The page toast (`msg`) belongs to the experiment dialog
+    and is deliberately not written from here.
+    """
+    reload_data = reload_data or 0
+    triggered = ctx.triggered_id
+    target = target or {}
+    hidden, shown = {"display": "none"}, {"display": "block"}
+
+    def shape(target=dash.no_update, opened_=dash.no_update, title=dash.no_update,
+              submit=dash.no_update, form=dash.no_update, style=dash.no_update,
+              message=dash.no_update, delta=0):
+        """The 8 outputs in order; `delta` reloads the list without touching the form."""
+        return (target, opened_, title, submit, form, style, message, reload_data + delta)
+
+    def listing(message="", delta=0):
+        """Back to the list: form hidden, submit label reset, message above the table."""
+        return shape(target=None, opened_=True, title="MQTT brokers", submit="Save broker",
+                     style=hidden, message=message, delta=delta)
+
+    def nothing():
+        return shape()
+
+    if triggered == "broker-open":
+        return listing()
+    if triggered == "broker-cancel":
+        return shape(target=None, opened_=False, message="")
+    if triggered == "broker-add":
+        return shape(target={"mode": "create"}, opened_=True, title="Add MQTT broker",
+                     submit="Save broker", form=broker_form(), style=shown, message="")
+    if triggered == "broker-submit":
+        mode, broker_id = target.get("mode"), target.get("id")
+        if mode == "delete":
+            alert, delta = delete_broker(broker_id)
+        elif mode in ("create", "edit"):
+            alert, delta = save_broker(broker_id if mode == "edit" else None, label, host, port,
+                                       prefix, user, password, enabled)
+        else:
+            alert, delta = ui.alert("pick a broker to edit, or add one (FR-15)", "amber"), 0
+        if delta:
+            return listing(alert, delta)              # written -> list, the dialog stays open
+        return shape(opened_=True, message=alert)     # keep the form with the reason inside
+    if isinstance(triggered, dict) and triggered.get("type") == "broker-btn":
+        # a rebuild adds these icons with n_clicks = 0 - only a real click may act
+        if not clicked(triggered, row_ids, row_clicks):
+            return nothing()
+        mode, broker_id = triggered.get("mode"), triggered.get("broker")
+        if mode == "toggle":
+            alert, delta = toggle_broker(broker_id)
+            return listing(alert, delta)
+        values = broker_values(broker_id)
+        if values is None:
+            return listing(ui.alert("that broker no longer exists", "amber"), 1)
+        if mode == "delete":
+            counts = query("""SELECT (SELECT count(*) FROM device d
+                                         WHERE d.broker_id = %(id)s) AS devices,
+                                     (SELECT count(*) FROM measurement m
+                                        JOIN device d ON d.id = m.device_id
+                                       WHERE d.broker_id = %(id)s) AS measurements""",
+                           {"id": broker_id})[0]
+            return shape(target={"mode": "delete", "id": broker_id}, opened_=True,
+                         title="Delete broker", submit="Delete broker", style=hidden,
+                         message=ui.alert(
+                             f"delete '{values['label']}' with its {counts['devices']} iSpindels "
+                             f"and {counts['measurements']} measurements? Their cards and their "
+                             f"experiments disappear from the dashboard. This cannot be undone.",
+                             "red"))
+        return shape(target={"mode": "edit", "id": broker_id}, opened_=True,
+                     title="Edit MQTT broker", submit="Save broker", form=broker_form(values),
+                     style=shown, message="")
+    return nothing()
+
+
+@app.callback(Output("broker-list", "children"),
+              Input("tick", "n_intervals"), Input("broker-reload", "data"),
+              Input("broker-modal", "opened"))
+def update_broker_list(_, __, opened):
+    """The FR-15 list inside the dialog. It re-reads while the dialog is open, so the state the
+    ingest writes back (connected / delivering / error) follows without closing the dialog."""
+    if not opened:
+        return dash.no_update
+    return broker_table(broker_rows())
 
 
 def chart_window(range_key):

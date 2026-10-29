@@ -19,6 +19,7 @@ mqtt:
 
 ingest:
   burst_seconds: 10              # fallback: max wait for the missing messages of a transmission
+  broker_refresh_seconds: 10     # FR-15: how often the running service re-reads the broker list
   gravity_unit: "P"              # unit of the calibration polynomial: "P" (Plato) or "SG"
   log_messages: true             # print every received topic - useful while testing hardware
 

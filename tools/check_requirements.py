@@ -55,6 +55,7 @@ main.execute("""DELETE FROM measurement WHERE experiment_id IN
              {"pat": "zz_validation%"})
 main.execute("DELETE FROM experiment WHERE name LIKE %(pat)s", {"pat": "zz_validation%"})
 main.execute("DELETE FROM device WHERE mqtt_name LIKE %(pat)s", {"pat": "zz_validation%"})
+main.execute("DELETE FROM mqtt_broker WHERE label LIKE %(pat)s", {"pat": "zz_validation%"})
 
 
 # ---- FR-12 / FR-13 / FR-15: the overview renders one card per active device ----
@@ -84,6 +85,70 @@ check("FR-12 the Devices table lists every device with its interval + a settings
       main.DEVICE_HEADERS[0] == "Name (MQTT topic)" and "Interval" in main.DEVICE_HEADERS
       and device_dump.count("dev-btn") == known,
       f"{known} devices, {device_dump.count('dev-btn')} settings icons")
+
+
+# ---- FR-15: the own broker from config.yml plus the brokers added in the dialog -----------
+# The own broker is never a row of `mqtt_broker` (NFR-08: it lives in config.yml), so the dialog
+# renders it as the read-only first row. Everything else is added at runtime - the phase where the
+# other participants' iSpindels publish to *their* brokers is exactly this case.
+brokers = main.broker_rows()
+check("FR-15 the broker list starts with the own broker from config.yml (read-only)",
+      brokers and brokers[0]["is_config"] and brokers[0]["host"] == main.CFG["mqtt"]["host"]
+      and brokers[0]["port"] == main.CFG["mqtt"]["port"], str(brokers[:1]))
+broker_dump = json.dumps(main.broker_table(brokers).to_plotly_json(), default=str)
+check("FR-15 the list names address, topic prefix and state of every broker",
+      f"{main.CFG['mqtt']['host']}:{main.CFG['mqtt']['port']}" in broker_dump
+      and main.CFG["mqtt"]["topic_prefix"] in broker_dump and "config.yml" in broker_dump
+      and main.BROKER_HEADERS == ["Broker", "Address", "Topic prefix", "iSpindels", "State",
+                                  "Actions"],
+      str(main.BROKER_HEADERS))
+
+alert, delta = main.save_broker(None, "zz_validation_broker", "127.0.0.1", 1884, "ispindel",
+                                "", "", ["on"])
+stored = main.query("SELECT id, label, host, port, is_enabled FROM mqtt_broker WHERE label = %s",
+                    ("zz_validation_broker",))
+broker_id = stored[0]["id"] if stored else None
+check("FR-15 a broker added in the dialog is stored and enabled",
+      bool(delta) and stored and stored[0]["port"] == 1884 and stored[0]["is_enabled"],
+      str(stored))
+check("FR-15 a second broker with the same label is refused",
+      main.save_broker(None, "zz_validation_broker", "127.0.0.1", 1885, "ispindel", "", "",
+                       ["on"])[1] == 0)
+check("FR-15 a broker without a host is refused",
+      main.save_broker(None, "zz_validation_nohost", "", 1883, "ispindel", "", "", ["on"])[1] == 0)
+
+# the ingest reads that very list while it runs (services/mqtt_service.py)
+import services.mqtt_service as ingest                                      # noqa: E402
+specs = ingest.broker_specs()
+enabled = main.query("SELECT count(*) AS n FROM mqtt_broker WHERE is_enabled")[0]["n"]
+check("FR-15 the ingest listens on the own broker plus every enabled one",
+      len(specs) == 1 + enabled and any(spec.get("port") == 1884 for spec in specs),
+      f"{len(specs)} listener(s): " + ", ".join(f"{s['host']}:{s['port']}" for s in specs))
+
+# the same iSpindel name on another broker is its own device (never merged with the own broker's)
+main.execute("INSERT INTO device (mqtt_name) VALUES ('zz_validation') ON CONFLICT DO NOTHING")
+main.execute("""INSERT INTO device (broker_id, mqtt_name) VALUES (%(id)s, 'zz_validation')
+                ON CONFLICT DO NOTHING""", {"id": broker_id})
+both = main.query("SELECT id, broker_id FROM device WHERE mqtt_name = 'zz_validation'")
+check("FR-15 the same iSpindel name on another broker is a second device",
+      len(both) == 2 and len({r["broker_id"] for r in both}) == 2, str(both))
+check("FR-15 the Devices table names the broker of every iSpindel",
+      "Broker" in main.DEVICE_HEADERS and "zz_validation_broker" in json.dumps(
+          main.device_table(main.device_rows()).to_plotly_json(), default=str))
+
+alert, delta = main.toggle_broker(broker_id)
+check("FR-15 pausing a broker is stored (the ingest stops listening within one pass)",
+      bool(delta) and not main.query("SELECT is_enabled FROM mqtt_broker WHERE id = %s",
+                                     (broker_id,))[0]["is_enabled"])
+alert, delta = main.toggle_broker(broker_id)
+check("FR-15 resuming a broker is stored",
+      bool(delta) and main.query("SELECT is_enabled FROM mqtt_broker WHERE id = %s",
+                                 (broker_id,))[0]["is_enabled"])
+alert, delta = main.delete_broker(broker_id)
+check("FR-15 deleting a broker takes its iSpindels with it (and nothing of the own broker)",
+      bool(delta) and not main.query("SELECT 1 FROM mqtt_broker WHERE id = %s", (broker_id,))
+      and not main.query("SELECT 1 FROM device WHERE broker_id = %s", (broker_id,)),
+      "deleted broker + its devices")
 
 
 def plain(obj):

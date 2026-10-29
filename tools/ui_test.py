@@ -217,11 +217,12 @@ main.execute("""INSERT INTO measurement (device_id, recorded_at, tilt_deg, temp_
                 VALUES (%s, now() - interval '5 minutes', 62, 20, 12, 3.9, 900, -55)""", (DEV,))
 
 # the ids come from the rendered card - exactly what the browser sends back
-setup_id = find_button_id(NAME, "setup-btn")
+setup_id = find_button_id(DEV, "setup-btn")
 check("the card renders a setup button whose id matches the callback pattern exactly",
       setup_id is not None and sorted(setup_id.keys()) == ["device", "slot", "type"],
       str(setup_id))
-check("the setup button carries the iSpindel name", setup_id and setup_id.get("device") == NAME,
+check("the setup button carries the device id (FR-15: the name repeats across brokers)",
+      setup_id and setup_id.get("device") == DEV,
       str(setup_id))
 setup_card = card_text(NAME)
 check("a card without an experiment says so", "no experiment yet" in setup_card)
@@ -250,14 +251,14 @@ for shape, value in (("list (browser)", [1]), ("scalar (single card)", 1)):
                         state(None))
     check(f"setup click opens the dialog for that device - {shape}",
           status == 200 and resp.get("exp-target", {}).get("data") == {"mode": "create",
-                                                                      "device": NAME}
+                                                                      "device": DEV}
           and resp.get("exp-modal", {}).get("opened") is True,
           f"http={status} {str(resp)[:110]}")
 
 # ---- 2. submit without a name -> dialog stays open, error inside -------------
 status, resp = post(setup_id, setup_id, ["exp-submit.n_clicks"],
                     {"setup": [1], "end": None, "cancel": None, "submit": 1},
-                    state({"device": NAME}))
+                    state({"device": DEV}))
 check("validation error keeps the dialog open with a message inside",
       resp.get("exp-modal", {}).get("opened") is True
       and "required" in str(resp.get("modal-msg", {}).get("children")),
@@ -266,7 +267,7 @@ check("validation error keeps the dialog open with a message inside",
 # ---- 3. submit with the details -> created, dialog closes --------------------
 status, resp = post(setup_id, setup_id, ["exp-submit.n_clicks"],
                     {"setup": [1], "end": None, "cancel": None, "submit": 2},
-                    state({"device": NAME}, name="zz_ui_exp", style="IPA", og="14.5",
+                    state({"device": DEV}, name="zz_ui_exp", style="IPA", og="14.5",
                           yeast="US-05", resp_="Tester", notes="from the dialog"))
 stored = main.query("""SELECT beer_style, og_plato, yeast, responsible, notes
                        FROM experiment WHERE name = 'zz_ui_exp'""")
@@ -280,7 +281,7 @@ check("dialog closes, the page reports it and the grid reloads",
       f"opened={resp.get('exp-modal')} reload={resp.get('reload')}")
 
 # ---- 4. the card now shows the running experiment + red end button ----------
-end_id = find_button_id(NAME, "end-btn")
+end_id = find_button_id(DEV, "end-btn")
 running_card = card_text(NAME)
 check("the card renders an end button whose id matches the callback pattern exactly",
       end_id is not None and sorted(end_id.keys()) == ["device", "slot", "type"], str(end_id))
@@ -334,7 +335,7 @@ check("the end button asks for confirmation in the same dialog (FR-04)",
       resp.get("exp-modal", {}).get("opened") is True
       and resp.get("exp-modal", {}).get("title") == "End experiment"
       and resp.get("exp-submit", {}).get("children") == "End experiment"
-      and resp.get("exp-target", {}).get("data") == {"mode": "end", "device": NAME},
+      and resp.get("exp-target", {}).get("data") == {"mode": "end", "device": DEV},
       f"opened={resp.get('exp-modal')} target={resp.get('exp-target', {}).get('data')}")
 check("the confirmation says what it ends and that assignment stops (FR-04)",
       "zz_ui_exp" in str(resp.get("modal-msg", {}).get("children"))
@@ -351,7 +352,7 @@ check("nothing is ended before the confirmation (FR-04)", still_running is None,
 # 6b: confirming in the dialog ends it (and the dialog closes)
 status, resp = post(setup_id, end_id, ["exp-submit.n_clicks"],
                     {"setup": None, "end": None, "cancel": None, "submit": 1},
-                    state({"mode": "end", "device": NAME}, reload_=1))
+                    state({"mode": "end", "device": DEV}, reload_=1))
 ended = main.query("SELECT ended_at FROM experiment WHERE name = 'zz_ui_exp'")[0]["ended_at"]
 check("confirming in the dialog ends the experiment of that card (FR-04)",
       ended is not None and "ended" in str(resp.get("msg", {}).get("children"))
@@ -359,7 +360,7 @@ check("confirming in the dialog ends the experiment of that card (FR-04)",
       f"ended_at={ended}")
 # the reported bug: ending by iSpindel name must work as well, never a 500
 main.create_experiment("zz_ui_exp2", DEV, "", "", "", "", "", "")
-alert, delta = main.end_experiment(NAME)
+alert, delta = main.end_experiment(DEV)
 ended2 = main.query("SELECT ended_at FROM experiment WHERE name = 'zz_ui_exp2'")[0]["ended_at"]
 check("ending by iSpindel name works (the bug that was reported)",
       ended2 is not None and delta == 1, f"{ended2} delta={delta}")
@@ -382,7 +383,7 @@ main.end_experiment(DEV)
 # ---- 7. cancel and a rebuilt grid do not create anything --------------------
 status, resp = post(setup_id, end_id, ["exp-cancel.n_clicks"],
                     {"setup": None, "end": [1], "cancel": 1, "submit": 2},
-                    state({"device": NAME}, name="zz_ui_exp", reload_=2))
+                    state({"device": DEV}, name="zz_ui_exp", reload_=2))
 check("cancel closes the dialog without creating anything",
       resp.get("exp-modal", {}).get("opened") is False
       and resp.get("exp-target", {}).get("data") is None, str(resp.get("exp-modal")))
@@ -504,7 +505,7 @@ status, resp = post(setup_id, end_id, changed(run_end),
 check("the end icon of a running row opens the same confirmation popup (FR-04)",
       resp.get("exp-modal", {}).get("title") == "End experiment"
       and resp.get("exp-submit", {}).get("children") == "End experiment"
-      and resp.get("exp-target", {}).get("data") == {"mode": "end", "device": NAME}
+      and resp.get("exp-target", {}).get("data") == {"mode": "end", "device": DEV}
       and "zz_ui_running" in str(resp.get("modal-msg", {}).get("children")),
       f"target={resp.get('exp-target', {}).get('data')}")
 check("nothing is ended before the confirmation (FR-04)",
@@ -513,7 +514,7 @@ check("nothing is ended before the confirmation (FR-04)",
 
 status, resp = post(setup_id, end_id, ["exp-submit.n_clicks"],
                     {"row": [1], "cancel": 1, "submit": 1},
-                    state({"mode": "end", "device": NAME}, reload_=1), row_id=run_end)
+                    state({"mode": "end", "device": DEV}, reload_=1), row_id=run_end)
 run_ended = main.query("SELECT ended_at FROM experiment WHERE id = %s", (running_id,))[0]
 check("confirming that popup ends the experiment (FR-04)",
       run_ended["ended_at"] is not None

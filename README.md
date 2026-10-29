@@ -6,8 +6,9 @@ transmission in **PostgreSQL** and shows the live and historical course in a **P
 dashboard in the local network - start and end experiments, follow the fermentation, compare
 batches, export the data as CSV.
 
-The whole system is **four containers** in one `compose.yaml` and runs on a Windows PC, a Mac, a
-Linux box or a Raspberry Pi:
+The whole system is **three containers** in one `compose.yaml` - database, broker and dashboard -
+plus an **optional fourth** container (`ingest`) that records a real iSpindel. It runs on a
+Windows PC, a Mac, a Linux box or a Raspberry Pi:
 
 ```
  iSpindel --Wi-Fi/MQTT--> mosquitto :1883 --subscribe--> ingest --INSERT--> PostgreSQL
@@ -50,10 +51,22 @@ cd ispindel-monitor
 docker compose up -d --build        # Podman Desktop instead: podman compose up -d --build
 ```
 
-The first run builds the image (a minute or two) and starts four containers. Check them with
+The first run builds the image (a minute or two) and starts three containers. Check them with
 
 ```bash
 <engine> compose ps
+```
+
+Open <http://localhost:8080> - the dashboard. PostgreSQL creates the schema on the first start.
+
+### Recording a real iSpindel (optional ingest)
+
+`up` starts the database, the broker and the dashboard. The **ingest** - the container that turns
+the iSpindel's seven messages into one table row - is **not** part of that; start it as the extra
+step when a real iSpindel should be recorded:
+
+```bash
+<engine> compose --profile ingest up -d ingest      # `up -d ingest` alone works too
 ```
 
 Now point the iSpindel at this machine - MQTT server = the LAN address, port `1883`:
@@ -64,8 +77,32 @@ Now point the iSpindel at this machine - MQTT server = the LAN address, port `18
 | Linux / Raspberry Pi | `hostname -I` |
 | Windows | `ipconfig` (IPv4 of the active adapter) |
 
-Open <http://localhost:8080> - the dashboard. PostgreSQL creates the schema on the first start, so
-an iSpindel that publishes to port 1883 is stored and shown immediately.
+From then on every transmission of that iSpindel is stored and shown live. The same container in
+the foreground is the one-off variant (Ctrl-C stops it), and stopping the stack **with** the
+profile stops the ingest as well - a plain `<engine> compose down` leaves it running:
+
+```bash
+<engine> compose --profile ingest run --rm ingest
+<engine> compose --profile ingest down
+```
+
+### Other iSpindels in use: their own brokers (FR-15)
+
+Each participant runs **their own** broker, so one broker is rarely enough. The small
+**MQTT brokers** button at the top right opens a dialog that adds one (label, host, port, topic
+prefix, optional user/password). For every broker the list shows how many iSpindels it delivered
+and what it does right now - *delivering*, *no message yet*, *silent since ...* or the
+connection error. A running ingest picks a broker up within `ingest.broker_refresh_seconds`
+(10 s) without a restart; pausing, editing or deleting it takes effect the same way.
+
+* The broker of `config.yml` is the first row and is **not** editable there - it stays in the file
+  (NFR-08). Everything else is data: the added brokers live in the `mqtt_broker` table.
+* Two participants may use the same iSpindel name on their own brokers - the name is unique **per
+  broker**, so the two stay two devices (the Devices tab names the broker of every iSpindel).
+* An iSpindel should publish to **one** of the configured brokers. One that publishes to two of
+  them is recorded twice, once per broker, because those are two independent sources.
+* The state values come from the ingest: while the ingest is not running they stay at their last
+  value.
 
 ### Something to look at first
 
@@ -86,22 +123,23 @@ On a stack that is already running, the same data comes from
 Everything seeded this way carries the `SIM_` prefix. Remove it again with
 `<engine> compose exec -T dashboard python tools/simulate.py --delete`.
 
-## 3 - The four containers
+## 3 - The containers
 
 | Service | Image / build | What it does | Reachable at |
 | --- | --- | --- | --- |
 | `db` | `docker.io/library/postgres:16-alpine` | storage; applies `sql/schema.sql` on the first start | `127.0.0.1:5433` - **loopback only** |
 | `broker` | `docker.io/library/eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` - LAN |
-| `ingest` | this repository (`Dockerfile`) | assembles the 7 messages of one transmission into one row | - |
+| `ingest` | this repository (`Dockerfile`) | **only with `--profile ingest`**: assembles the 7 messages of one transmission into one row (section 2) | - |
 | `dashboard` | this repository (`Dockerfile`) | Plotly Dash behind gunicorn | `<host>:8080` - LAN |
 | `seed` | this repository (`Dockerfile`) | **only with `--profile demo`**: one-shot, seeds the simulated fleet and exits | - |
 
 The three official images are multi-arch, so the same `compose.yaml` runs on x86-64 and on the
 Raspberry Pi (arm64). Their names are **fully qualified** (`docker.io/library/...`), so Podman
 never has to guess a registry: a bare `postgres:16-alpine` needs a short-name alias in the host's
-`/etc/containers/registries.conf` and fails on a fresh Raspberry Pi. `ingest` and `dashboard` are
-the **same image** and differ only in their `command`. The dashboard has **no authentication** -
-keep it inside the local network.
+`/etc/containers/registries.conf` and fails on a fresh Raspberry Pi. The `ingest` and the
+`dashboard` are the **same image** and differ only in their `command`, which is why an ingest that
+is started on demand needs no second build. The dashboard has **no authentication** - keep it
+inside the local network.
 
 ## 4 - Configuration
 
@@ -113,6 +151,7 @@ contains **no machine-specific value**, so nothing has to be rewritten on anothe
 | `database.dsn` | PostgreSQL connection string (only used by a run **without** containers) |
 | `mqtt.host` / `mqtt.port` / `mqtt.client_id` / `mqtt.topic_prefix` | broker address, unique client id, `ispindel` topic prefix |
 | `ingest.burst_seconds` / `gravity_unit` / `log_messages` | burst fallback, device gravity unit (`P`/`SG`), verbose logging |
+| `ingest.broker_refresh_seconds` | FR-15: how often the running ingest re-reads the broker list (0 = only at startup) |
 | `dashboard.refresh_ms` / `live_ms` | chart refresh (FR-14), countdown tick |
 | `dashboard.battery_*_v` | battery gauge limits and the FR-19 warning threshold |
 | `dashboard.expected_attenuation` / `target_temp_c` | FR-20 targets (FG, ABV estimate, temperature window per style) |
@@ -141,7 +180,12 @@ $env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
 | start / update after a code change | `<engine> compose up -d --build` |
 | stop (the `pgdata` volume - the data - survives) | `<engine> compose down` |
 | follow the logs (Ctrl-C leaves them running) | `<engine> compose logs -f --tail 50` |
-| what runs | `<engine> compose ps` |
+| what runs (three containers; the ingest appears only once started) | `<engine> compose ps` |
+| start the ingest - records a real iSpindel | `<engine> compose --profile ingest up -d ingest` |
+| the ingest as a one-off in the foreground (Ctrl-C stops it) | `<engine> compose --profile ingest run --rm ingest` |
+| stop the stack incl. the ingest (plain `down` leaves the ingest container behind) | `<engine> compose --profile ingest down` |
+| the ingest's log | `<engine> compose --profile ingest logs -f ingest` |
+| add / pause / delete another MQTT broker (FR-15) | the **MQTT brokers** button in the dashboard - no command |
 | is the database ready? | `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | the three self-tests | `<engine> compose exec -T dashboard python tools/check_requirements.py` etc. |
 | start (or update) with mock data | `<engine> compose --profile demo up -d --build` |
@@ -167,13 +211,55 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ispindel ispindel-backup.timer
 ```
 
-* `ispindel.service` runs `podman compose up -d` at boot. With Podman there is no daemon that
-  could restore the containers, so this unit **is** the boot mechanism. (Docker restores them by
-  itself - the unit is harmless there, `systemctl enable ispindel` is simply optional.)
+* `ispindel.service` runs `podman compose --profile ingest up -d` at boot. The `--profile ingest`
+  is deliberate: the ingest is optional in `compose.yaml`, but after a power cycle the Pi has to
+  keep recording without anyone logging in (NFR-03), and the unit's matching `down` removes the
+  ingest container as well. With Podman there is no daemon that could restore the containers, so
+  this unit **is** the boot mechanism. (Docker restores them by itself - the unit is harmless
+  there, `systemctl enable ispindel` is simply optional.)
 * `ispindel-backup.timer` runs `deploy/backup.sh` nightly at 03:30 into `/var/backups/ispindel`,
   keeps 14 days and verifies the dump is not empty.
 * The Pi has **no real-time clock**: both units wait for `time-sync.target`, otherwise
   `recorded_at` would be stamped wrong (FR-08 / NFR-09).
+
+### Coming from the old bare-metal installation
+
+The first installation used apt `mosquitto` and `postgresql`, a conda env and the two systemd units
+`ispindel-ingest` / `ispindel-dashboard`. Those units hold **`1883`** and **`8080`**, so the
+containers cannot bind their ports and stop with:
+
+```
+Error: rootlessport listen tcp 0.0.0.0:1883: bind: address already in use
+Error: rootlessport listen tcp 0.0.0.0:8080: bind: address already in use
+```
+
+Stop and disable them once - the stack brings its own broker and dashboard:
+
+```bash
+sudo ss -ltnp | grep -E ':(1883|8080)\b'                          # who holds the two ports
+sudo systemctl disable --now ispindel-ingest ispindel-dashboard mosquitto
+sudo ss -ltn  | grep -E ':(1883|8080)\b' || echo '1883 and 8080 are free'
+```
+
+Then clear what a failed attempt left behind and start the stack again:
+
+```bash
+cd /srv/ispindel && podman compose --profile ingest down && podman compose up -d --build
+```
+
+`postgresql.service` **stays**: it holds the measurements of the fermentation phase on `5432`,
+while the database of the stack starts empty (`127.0.0.1:5433` on the host). Copy the rows into
+the container database - data only, because `sql/schema.sql` already created the tables there:
+
+```bash
+PGPASSWORD=ispindel pg_dump -h 127.0.0.1 -p 5432 -U ispindel --data-only --inserts ispindel > /tmp/old-data.sql
+podman compose exec -T db psql -U ispindel -d ispindel < /tmp/old-data.sql
+podman compose exec -T db psql -U ispindel -d ispindel -c 'SELECT count(*) FROM measurement'
+```
+
+Finally point the iSpindel at the broker of the stack: server = the Pi's LAN address, port `1883`
+(the topics do not change: `<prefix>/<device name>/<field>`).
+
 
 A manual backup (also fine on the Mac or on Windows):
 
@@ -223,18 +309,20 @@ out in full inside a `className`/`extra` argument (Tailwind compiles from the ra
 | Symptom | Check |
 | --- | --- |
 | dashboard not reachable | `<engine> compose ps`, then `<engine> compose logs dashboard` |
-| no measurements arrive | `<engine> compose logs ingest` (prints every topic when `ingest.log_messages` is on), `<engine> compose logs broker` |
+| no rows in the dashboard | is the ingest running? `<engine> compose ps` shows three containers - start it with `<engine> compose --profile ingest up -d ingest` (section 2) |
+| a broker stays at *no message yet* | the ingest must run **and** reach that address: `<engine> compose --profile ingest logs -f ingest` names every listener and its error (FR-15) |
+| no measurements arrive | `<engine> compose --profile ingest logs ingest` (prints every topic when `ingest.log_messages` is on), `<engine> compose logs broker` |
 | ingest stores nothing | is the database up? `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | stale UI after a class change | the CSS is baked into the image - run `cd assets && npm run css`, then `<engine> compose up -d --build` |
 | changed `compose.yaml`, weird behaviour | `<engine> compose down && <engine> compose up -d` (a changed port/volume needs a recreate) |
-| port already in use | move it: `ISPINDEL_HTTP_PORT=8090` (see section 4) |
+| `bind: address already in use` for `1883`/`8080` | something else already listens there - an old bare-metal installation or a second stack (section 6); the dashboard port alone moves with `ISPINDEL_HTTP_PORT=8090` (section 4) |
 | `short-name "postgres:16-alpine" did not resolve to an alias` (Podman) | the clone predates the fully qualified image names - `git pull`; `compose.yaml` names every image as `docker.io/library/...` |
 | "no container with ID or name" (Podman) | never remove containers by hand - always `compose down` |
 
 ## 10 - Repository layout
 
 ```
-compose.yaml              the four services
+compose.yaml              the stack (db, broker, dashboard) + the optional ingest/seed profiles
 Dockerfile                the image of the ingest service and the dashboard (one build, two commands)
 config.yml                all settings (NFR-08), no machine-specific value in it
 requirements.txt          runtime dependencies - what the image installs
@@ -245,7 +333,7 @@ components/charts.py      Plotly fermentation charts
 services/db.py            tiny PostgreSQL helper
 services/mqtt_service.py  MQTT -> PostgreSQL: assembles the 7 messages into one row
 assets/                   Dash-served: tailwind.css, card_state.js, fonts/; package.json builds the CSS
-sql/schema.sql            schema, keys, views; applied automatically on the first start
+sql/schema.sql            schema, keys, views (incl. `mqtt_broker` for the FR-15 brokers); on first start
 sql/migrations/           view/constraint migrations for a database that already exists
 tools/                    self-tests and simulators
 deploy/mosquitto.conf     broker configuration (mounted into the broker container)

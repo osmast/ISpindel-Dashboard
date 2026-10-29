@@ -13,8 +13,12 @@ After=network-online.target time-sync.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/srv/ispindel
-ExecStart=/usr/bin/podman compose up -d --remove-orphans
-ExecStop=/usr/bin/podman compose down
+# `--profile ingest` on purpose: in compose.yaml the ingest is optional (one starts it when an
+# iSpindel should be recorded), but after a power cycle the Pi must keep recording by itself
+# (NFR-03) - so the boot step starts it too. ExecStop carries the same profile, otherwise `down`
+# would leave the ingest container behind (Compose's `down` skips services of inactive profiles).
+ExecStart=/usr/bin/podman compose --profile ingest up -d --remove-orphans
+ExecStop=/usr/bin/podman compose --profile ingest down
 TimeoutStartSec=600
 
 [Install]
