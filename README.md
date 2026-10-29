@@ -103,8 +103,11 @@ iSpindel has to publish to, plus the label underneath).
 
 * The broker of `config.yml` is the first row and is **not** editable there - it stays in the file
   (NFR-08). Everything else is data: the added brokers live in the `mqtt_broker` table.
-* The devices tab shows the same list **inline** (below the devices, read-only) - so a broker that
+* The Devices tab shows the same list **inline** (below the devices, read-only) - so a broker that
   is configured but not yet delivering is visible without opening the dialog.
+* Each device row also carries a **trash icon**: it deletes that iSpindel with its experiments and
+  measurements (a confirmation first, FR-12). A device that is still publishing is created again by
+  the next transmission - that is the honest behaviour, not a bug.
 * A broker that wants a login answers `Not authorized`; the row then shows
   **not connected: connect failed: Not authorized** - put the user and password into the form
   (mosquitto's `allow_anonymous false`). A host that is down or in another network shows
@@ -209,6 +212,7 @@ $env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
 | stop the stack incl. the ingest (plain `down` leaves the ingest container behind) | `<engine> compose --profile ingest down` |
 | the ingest's log | `<engine> compose --profile ingest logs -f ingest` |
 | add / pause / delete another MQTT broker (FR-15) | the **MQTT brokers** button at the bottom left of the *Devices* tab - no command |
+| delete an iSpindel with its measurements and experiments (FR-12) | the **trash icon** of its row in the *Devices* tab (asks first) - a device that still publishes is created again by the next transmission |
 | is the database ready? | `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | the three self-tests | `<engine> compose exec -T dashboard python tools/check_requirements.py` etc. |
 | start (or update) with mock data | `<engine> compose --profile demo up -d --build` |

@@ -82,10 +82,22 @@ else:
 # with one settings action per row - a new iSpindel appears here without any code change
 device_dump = json.dumps(main.device_table(main.device_rows()).to_plotly_json(), default=str)
 known = main.query("SELECT count(*) AS n FROM device")[0]["n"]
-check("FR-12 the Devices table lists every device with its interval + a settings action",
+check("FR-12 the Devices table lists every device with its interval + settings and delete actions",
       main.DEVICE_HEADERS[0] == "Name (MQTT topic)" and "Interval" in main.DEVICE_HEADERS
-      and device_dump.count("dev-btn") == known,
-      f"{known} devices, {device_dump.count('dev-btn')} settings icons")
+      and device_dump.count("dev-btn") == 2 * known,
+      f"{known} devices, {device_dump.count('dev-btn')} action icons")
+
+# FR-12: an iSpindel can be removed from the Devices tab - with everything it recorded
+main.execute("""INSERT INTO device (mqtt_name) VALUES ('zz_validation_del')
+                ON CONFLICT DO NOTHING""")
+del_id = main.query("SELECT id FROM device WHERE mqtt_name = 'zz_validation_del'")[0]["id"]
+main.execute("""INSERT INTO measurement (device_id, recorded_at, tilt_deg) VALUES (%s, now(), 60)""",
+             (del_id,))
+alert, delta = main.delete_device(del_id)
+check("FR-12 deleting an iSpindel removes it and the measurements it recorded",
+      bool(delta) and not main.query("SELECT 1 FROM device WHERE id = %s", (del_id,))
+      and not main.query("SELECT 1 FROM measurement WHERE device_id = %s", (del_id,)),
+      "device + its rows are gone")
 
 
 # ---- FR-15: the own broker from config.yml plus the brokers added in the dialog -----------

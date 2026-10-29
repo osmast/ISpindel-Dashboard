@@ -43,7 +43,7 @@ def outputs():
 ROW_ID = {"type": "row-btn", "exp": 0, "mode": "edit"}
 
 # a stand-in for the settings icon of a Devices-table row (FR-12)
-DEV_ID = {"type": "dev-btn", "device": 0}
+DEV_ID = {"type": "dev-btn", "device": 0, "mode": "settings"}
 
 
 # Dash builds the multi-output key itself (with leading/trailing "..") - take it from there
@@ -634,12 +634,12 @@ check("every callback Input/State id exists in the initial layout (no 'ID not fo
 # The Devices table manages the `device` master data (the values the ingest created on the first
 # message). The dialog reuses the experiment modal with a different form, so the same `post()` works.
 dev_row = main.query("SELECT id FROM device WHERE mqtt_name = %s", (NAME,))[0]["id"]
-dev_btn = {"type": "dev-btn", "device": dev_row}
+dev_btn = {"type": "dev-btn", "device": dev_row, "mode": "settings"}
 dev_table = json.dumps(main.device_table(main.device_rows()).to_plotly_json(), default=str)
-check("the Devices table lists the iSpindel with its interval and a settings action (FR-12)",
+check("the Devices table lists the iSpindel with its interval, settings and delete actions (FR-12)",
       main.DEVICE_HEADERS[0] == "Name (MQTT topic)" and "Interval" in main.DEVICE_HEADERS
-      and NAME in dev_table and "dev-btn" in dev_table,
-      str(main.DEVICE_HEADERS))
+      and NAME in dev_table and dev_table.count("dev-btn") >= 2,
+      f"{dev_table.count('dev-btn')} action icons, headers {main.DEVICE_HEADERS}")
 
 status, resp = post(setup_id, end_id, changed(dev_btn), {"dev": 1}, state(None, reload_=1),
                     dev_id=dev_btn)
@@ -650,6 +650,17 @@ check("the Devices settings icon opens the device dialog (FR-12)",
       and resp.get("dev-form", {}).get("style") == {"display": "block"}
       and resp.get("exp-form", {}).get("style") == {"display": "none"},
       f"title={resp.get('exp-modal', {}).get('title')!r}")
+
+# FR-12: the delete icon must ask first - it does not remove an iSpindel on the first click
+del_btn = {"type": "dev-btn", "device": dev_row, "mode": "delete"}
+status, resp = post(setup_id, end_id, changed(del_btn), {"dev": 1}, state(None, reload_=1),
+                    dev_id=del_btn)
+check("the delete icon opens a confirmation instead of deleting at once (FR-12)",
+      resp.get("exp-target", {}).get("data") == {"mode": "delete-device", "id": dev_row}
+      and resp.get("exp-modal", {}).get("title") == "Delete iSpindel"
+      and "cannot be undone" in str(resp.get("modal-msg", {}).get("children"))
+      and main.query("SELECT 1 FROM device WHERE id = %s", (dev_row,)),
+      str(resp.get("exp-target", {}).get("data")))
 
 status, resp = post(setup_id, end_id, ["exp-submit.n_clicks"], {"submit": 1},
                     state({"mode": "device", "id": dev_row}, reload_=1),

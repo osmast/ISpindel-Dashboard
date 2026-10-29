@@ -954,14 +954,46 @@ def broker_cell(row, host=""):
 
 
 def device_actions(device_id):
-    """The one action of a device row (FR-12): open the settings dialog."""
-    return dmc.Tooltip(
-        label="device settings", position="top", withArrow=True, openDelay=300,
-        children=dmc.ActionIcon(
-            DashIconify(icon="tabler:settings", width=15),
-            id={"type": "dev-btn", "device": device_id},
-            variant="subtle", color="gray", size="sm", radius="md",
-            **{"aria-label": "device settings"}))
+    """The actions of a device row (FR-12): settings and delete.
+
+    Deleting an iSpindel removes **everything it recorded** (its experiments and measurements) - the
+    way to get rid of a test device, or of a device that arrived through the wrong broker. The
+    ingest creates it again on the next transmission (a device that is gone from the fermenter stops
+    at first).
+    """
+    def icon(mode, icon_name, label, colour):
+        return dmc.Tooltip(
+            label=label, position="top", withArrow=True, openDelay=300,
+            children=dmc.ActionIcon(
+                DashIconify(icon=icon_name, width=15),
+                id={"type": "dev-btn", "device": device_id, "mode": mode},
+                variant="subtle", color=colour, size="sm", radius="md",
+                **{"aria-label": label}))
+
+    return html.Div(className="flex items-center gap-1", children=[
+        icon("settings", "tabler:settings", "device settings", "gray"),
+        icon("delete", "tabler:trash", "delete this iSpindel", "red"),
+    ])
+
+
+def delete_device(device_id):
+    """FR-12: delete an iSpindel with everything it recorded. Returns (alert, reload_delta).
+
+    `measurement` and `experiment` reference `device` without a cascade, so they go first.
+    """
+    rows = query("""SELECT d.mqtt_name,
+                           (SELECT count(*) FROM measurement m WHERE m.device_id = d.id)
+                               AS measurements,
+                           (SELECT count(*) FROM experiment e WHERE e.device_id = d.id) AS experiments
+                    FROM device d WHERE d.id = %s""", (device_id,))
+    if not rows:
+        return ui.alert("that iSpindel no longer exists", "amber"), 0
+    row = rows[0]
+    execute("DELETE FROM measurement WHERE device_id = %s", (device_id,))
+    execute("DELETE FROM experiment WHERE device_id = %s", (device_id,))
+    execute("DELETE FROM device WHERE id = %s", (device_id,))
+    return ui.alert(f"iSpindel '{row['mqtt_name']}' deleted, with its {row['experiments']} "
+                    f"experiments and {row['measurements']} measurements (FR-12)", "green"), 1
 
 
 def device_rows():
@@ -1437,8 +1469,8 @@ def delete_experiment(exp_id):
               Input({"type": "setup-btn", "device": ALL, "slot": ALL}, "n_clicks"),
               Input({"type": "end-btn", "device": ALL, "slot": ALL}, "n_clicks"),
               Input({"type": "row-btn", "exp": ALL, "mode": ALL}, "n_clicks"),
-              # FR-12: the settings icon of a row in the Devices table
-              Input({"type": "dev-btn", "device": ALL}, "n_clicks"),
+              # FR-12: the settings / delete icons of a row in the Devices table
+              Input({"type": "dev-btn", "device": ALL, "mode": ALL}, "n_clicks"),
               Input("exp-cancel", "n_clicks"), Input("exp-submit", "n_clicks"),
               State("exp-target", "data"),
               State("new-name", "value"), State("new-start", "value"), State("new-style", "value"),
@@ -1452,7 +1484,7 @@ def delete_experiment(exp_id):
               State("range", "value"),                       # FR-22: the export time range
               # FR-12: the fields of the device dialog (the same modal, a different form)
               State("dev-name", "value"), State("dev-active", "value"),
-              State({"type": "dev-btn", "device": ALL}, "id"),
+              State({"type": "dev-btn", "device": ALL, "mode": ALL}, "id"),
               prevent_initial_call=True)
 def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, target, name, start,
                       style, og, yeast, responsible, notes, reload_data, setup_ids, end_ids,
@@ -1520,6 +1552,8 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
             alert, delta = end_experiment(target.get("device"))
         elif mode == "device":                         # FR-12: the device settings dialog
             alert, delta = update_device(target.get("id"), dev_name, dev_active)
+        elif mode == "delete-device":                  # FR-12: deleting an iSpindel, confirmed
+            alert, delta = delete_device(target.get("id"))
         else:
             alert, delta = create_experiment(name, target.get("device"), start, style, og, yeast,
                                              responsible, notes)
@@ -1565,12 +1599,27 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
         return opened({"mode": "edit", "id": triggered.get("exp")},
                       "Edit experiment", "Save changes", experiment_form(values))
     if isinstance(triggered, dict) and triggered.get("type") == "dev-btn":
-        # FR-12: the settings icon of a Devices-table row (guarded by `clicked()` like the rest)
+        # FR-12: the icons of a Devices-table row (guarded by `clicked()` like the rest)
         if not clicked(triggered, dev_ids, dev_clicks):
             return nothing()
         values = device_values(triggered.get("device"))
         if values is None:
             return closed(ui.toast(ui.alert("that iSpindel no longer exists", "amber")))
+        if triggered.get("mode") == "delete":
+            # FR-12: deleting an iSpindel takes everything it recorded - ask first (FR-06 pattern)
+            counts = query("""SELECT (SELECT count(*) FROM measurement m
+                                         WHERE m.device_id = %(id)s) AS measurements,
+                                     (SELECT count(*) FROM experiment e
+                                         WHERE e.device_id = %(id)s) AS experiments""",
+                           {"id": triggered.get("device")})[0]
+            return opened({"mode": "delete-device", "id": triggered.get("device")},
+                          "Delete iSpindel", "Delete iSpindel", device_form(values),
+                          ui.alert(f"delete '{values['mqtt_name']}' with its "
+                                   f"{counts['experiments']} experiments and "
+                                   f"{counts['measurements']} measurements? It reappears on the "
+                                   f"next transmission of that device. This cannot be undone.",
+                                   "red"),
+                          device=True)
         return opened({"mode": "device", "id": triggered.get("device")},
                       "Device settings", "Save device", device_form(values), device=True)
     return nothing()
