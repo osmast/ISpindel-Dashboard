@@ -171,11 +171,13 @@ details[data-card][open]::details-content {
   }
 }
 
-/* The live glass of assets/cursor.js. The root class comes from the script, so this only ever
- * applies while the glass is really there; `cursor: none` on everything is the price of a custom
- * pointer - the text I-beam of the inputs is gone with it, and the glass marks the point instead. */
-html.beer-cursor,
-html.beer-cursor * {
+/* The live glass of assets/cursor.js. The flag attribute comes from the script (**not** a class:
+ * a `beer-cursor` class on <html> was matched by the `.beer-cursor` rule below as well, which shrank
+ * the whole page to a 34 px invisible box - the white page of 29.10.2026). So this only ever applies
+ * while the glass is really there; `cursor: none` on everything is the price of a custom pointer -
+ * the text I-beam of the inputs is gone with it, and the glass marks the point instead. */
+html[data-beer-cursor],
+html[data-beer-cursor] * {
   cursor: none;
 }
 

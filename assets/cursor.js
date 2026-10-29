@@ -14,9 +14,13 @@
  * Our system, not a side car:
  *  - a normal Dash asset: assets/ is linked automatically, and the Dockerfile COPY list carries the
  *    file into the image (a file that is only committed works on the host and 404s in the container);
- *  - the class that hides the native pointer is added **by this script, as its last step**: if
- *    anything above fails the browser keeps its own cursor, and without JavaScript or with reduced
- *    motion the static glass cursors of input.pcss are still in place - the same glass;
+ *  - the flag that hides the native pointer is set on <html> **as the script's last step, as a data
+ *    attribute**: `data-beer-cursor` matches nothing else, while a class would be matched by the
+ *    `.beer-cursor` box rule of input.pcss as well - that collision turned the whole page into a
+ *    34 px invisible box (29.10.2026, the white page);
+ *  - the box of the glass is set inline here **and** in input.pcss: the stylesheet is what makes it
+ *    look right, the inline copy is what keeps a broken/absent stylesheet from turning the 100 %
+ *    sized SVG inside into a full-page overlay;
  *  - NFR-06: only for a real pointer (`pointer: fine`) - a touch device has no cursor to draw;
  *  - `pointer-events: none`, so clicks reach the page, and the glass is offset by its own rim, so
  *    the rim - not the middle of the glass - is the point that clicks.
@@ -82,6 +86,18 @@
 
     var glass = document.createElement("div");
     glass.className = "beer-cursor";
+    // the box, inline as well as in input.pcss: the stylesheet is what makes it look right, but if
+    // it is ever missing the 100 % sized SVG inside would stretch over the whole page instead of
+    // being the 34 px glass - so the size does not depend on a stylesheet being there.
+    // (opacity stays in the CSS, otherwise the is-visible state could not override it)
+    glass.style.position = "fixed";
+    glass.style.top = "0";
+    glass.style.left = "0";
+    glass.style.width = SIZE + "px";
+    glass.style.height = SIZE + "px";
+    glass.style.zIndex = "99999";
+    glass.style.pointerEvents = "none";
+    glass.style.willChange = "transform";
     glass.innerHTML = GLASS;
     document.body.appendChild(glass);
 
@@ -122,7 +138,9 @@
         }
     });
 
-    // the last step, once everything above is wired: from here on the native pointer is hidden. If
-    // an earlier line threw, this class is never added and the browser keeps its own cursor.
-    document.documentElement.classList.add("beer-cursor");
+    // the last step, once everything above is wired: from here on the native pointer is hidden. The
+    // flag is a data attribute and not a class on purpose - a class would be matched by the
+    // `.beer-cursor` box rule of input.pcss too and shrink the whole page (see the file header). If
+    // an earlier line threw, the attribute is never set and the browser keeps its own cursor.
+    document.documentElement.setAttribute("data-beer-cursor", "on");
 })();
