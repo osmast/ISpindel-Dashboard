@@ -197,6 +197,14 @@ $env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
 
 `ISPINDEL_CONFIG=/path/to/other.yml` points any component at a completely different file.
 
+A local **`.env`** in the project directory does the same job permanently - Compose reads it
+automatically, and `.gitignore` keeps it out of the repository, so the machine-specific value never
+travels:
+
+```bash
+ISPINDEL_HTTP_PORT=8081        # e.g. because something else holds 8080 on this machine
+```
+
 ## 5 - Everyday commands
 
 `<engine>` = `podman` or `docker`. Run them in the cloned directory.
@@ -345,6 +353,7 @@ out in full inside a `className`/`extra` argument (Tailwind compiles from the ra
 | changed `compose.yaml`, weird behaviour | `<engine> compose down && <engine> compose up -d` (a changed port/volume needs a recreate) |
 | `bind: address already in use` for `1883`/`8080` | something else already listens there - an old bare-metal installation or a second stack (section 6); the dashboard port alone moves with `ISPINDEL_HTTP_PORT=8090` (section 4) |
 | `short-name "postgres:16-alpine" did not resolve to an alias` (Podman) | the clone predates the fully qualified image names - `git pull`; `compose.yaml` names every image as `docker.io/library/...` |
+| `crun: executable file '${ISPINDEL_DASHBOARD_CMD:-gunicorn' not found in $PATH` (Podman) | podman-compose cannot expand `${VAR:-default}` inside `command:` - the list form with `sh -c ... exec` in `compose.yaml` fixes it; `git pull` and `<engine> compose up -d` (a rebuild is not needed) |
 | "no container with ID or name" (Podman) | never remove containers by hand - always `compose down` |
 
 ## 10 - Repository layout

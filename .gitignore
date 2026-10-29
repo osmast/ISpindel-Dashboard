@@ -10,6 +10,7 @@ docs/
 package*.json
 deploy/backups/
 config.local.yml
+.env
 .venv/
 *.log
 .DS_Store
