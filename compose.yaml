@@ -88,6 +88,38 @@ services:
       - ./assets:/repo/assets
       - ./tools:/repo/tools:ro
 
+  # Optional demo data: `--profile demo` also starts this one-shot service, which seeds the
+  # simulated fleet once the database is ready and then exits. Without the profile the stack
+  # stays empty.
+  #   <engine> compose --profile demo up -d --build        -> the app shows the mock data
+  #   <engine> compose exec -T dashboard python tools/simulate.py --delete   -> remove it again
+  seed:
+    image: ispindel-monitor:latest
+    build: .
+    profiles: ["demo"]
+    restart: "no"
+    # wait for the schema as well: on a fresh volume `pg_isready` can answer while
+    # /docker-entrypoint-initdb.d/schema.sql is still running, and the seed must not race it
+    command:
+      - sh
+      - -c
+      - |
+        until python -c "import services.db as d; d.query('SELECT 1 FROM measurement LIMIT 1')" 2>/dev/null; do
+          echo "waiting for the database schema ..."
+          sleep 2
+        done
+        exec python tools/simulate.py --demo --until-now
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ISPINDEL_DB_DSN: postgresql://ispindel:ispindel@db:5432/ispindel
+      TZ: UTC
+    volumes:
+      - ./config.yml:/repo/config.yml:ro
+      - ./services:/repo/services:ro
+      - ./tools:/repo/tools:ro
+
 volumes:
   pgdata:                           # NFR-04: the measurements live here
   brokerdata:

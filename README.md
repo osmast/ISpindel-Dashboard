@@ -69,13 +69,22 @@ an iSpindel that publishes to port 1883 is stored and shown immediately.
 
 ### Something to look at first
 
+The dashboard starts **empty**. To see it with data instead, start the stack with the `demo`
+profile - it adds a one-shot container that seeds six simulated iSpindels (17 batches: cards,
+comparison chart, CSV export) and then exits:
+
 ```bash
-<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now
-<engine> compose exec -T dashboard python tools/check_requirements.py
+<engine> compose --profile demo up -d --build
 ```
 
-`--demo` seeds six simulated iSpindels with 17 batches (cards, comparison chart, CSV export).
-Remove it again with `python tools/simulate.py --delete`.
+On a stack that is already running, the same data comes from
+
+```bash
+<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now
+```
+
+Everything seeded this way carries the `SIM_` prefix. Remove it again with
+`<engine> compose exec -T dashboard python tools/simulate.py --delete`.
 
 ## 3 - The four containers
 
@@ -85,6 +94,7 @@ Remove it again with `python tools/simulate.py --delete`.
 | `broker` | `eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` - LAN |
 | `ingest` | this repository (`Dockerfile`) | assembles the 7 messages of one transmission into one row | - |
 | `dashboard` | this repository (`Dockerfile`) | Plotly Dash behind gunicorn | `<host>:8080` - LAN |
+| `seed` | this repository (`Dockerfile`) | **only with `--profile demo`**: one-shot, seeds the simulated fleet and exits | - |
 
 The three official images are multi-arch, so the same `compose.yaml` runs on x86-64 and on the
 Raspberry Pi (arm64). `ingest` and `dashboard` are the **same image** and differ only in their
@@ -131,7 +141,9 @@ $env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
 | what runs | `<engine> compose ps` |
 | is the database ready? | `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | the three self-tests | `<engine> compose exec -T dashboard python tools/check_requirements.py` etc. |
-| seed the demo fleet | `<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now` |
+| start (or update) with mock data | `<engine> compose --profile demo up -d --build` |
+| seed the demo fleet on a running stack | `<engine> compose exec -T dashboard python tools/simulate.py --demo --until-now` |
+| remove the mock data again | `<engine> compose exec -T dashboard python tools/simulate.py --delete` |
 | a psql prompt on the database | `<engine> compose exec db psql -U ispindel -d ispindel` |
 | a shell inside the dashboard container | `<engine> compose exec dashboard bash` |
 | development (Dash hot reload, writes to the source tree) | `ISPINDEL_DASHBOARD_CMD="python main.py" <engine> compose up -d --build` |
