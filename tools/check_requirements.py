@@ -103,6 +103,15 @@ check("FR-15 the list names address, topic prefix and state of every broker",
                                   "Actions"],
       str(main.BROKER_HEADERS))
 
+# the own broker has no `mqtt_broker` row (NFR-08), so its state can only come from the data that
+# was stored for its iSpindels - the trap that made it read "no message yet" while it was delivering
+own_state = json.dumps(main.broker_state(brokers[0]).to_plotly_json(), default=str)
+if brokers[0].get("last_stored"):
+    check("FR-15 the own broker shows a state derived from its newest stored measurement",
+          "delivering" in own_state or "silent since" in own_state, own_state[:70])
+else:
+    print("INFO  the own broker has no measurement yet - its chip stays at 'no data yet'")
+
 alert, delta = main.save_broker(None, "zz_validation_broker", "127.0.0.1", 1884, "ispindel",
                                 "", "", ["on"])
 stored = main.query("SELECT id, label, host, port, is_enabled FROM mqtt_broker WHERE label = %s",
@@ -111,6 +120,11 @@ broker_id = stored[0]["id"] if stored else None
 check("FR-15 a broker added in the dialog is stored and enabled",
       bool(delta) and stored and stored[0]["port"] == 1884 and stored[0]["is_enabled"],
       str(stored))
+added_row = [r for r in main.broker_rows() if r["label"] == "zz_validation_broker"][0]
+check("FR-15 a broker without data says so instead of pretending to deliver",
+      added_row["last_stored"] is None and added_row["last_message_at"] is None
+      and "no data yet" in json.dumps(main.broker_state(added_row).to_plotly_json(), default=str),
+      str({k: added_row[k] for k in ("label", "last_stored", "last_connected_at")}))
 check("FR-15 a second broker with the same label is refused",
       main.save_broker(None, "zz_validation_broker", "127.0.0.1", 1885, "ispindel", "", "",
                        ["on"])[1] == 0)
@@ -132,9 +146,15 @@ main.execute("""INSERT INTO device (broker_id, mqtt_name) VALUES (%(id)s, 'zz_va
 both = main.query("SELECT id, broker_id FROM device WHERE mqtt_name = 'zz_validation'")
 check("FR-15 the same iSpindel name on another broker is a second device",
       len(both) == 2 and len({r["broker_id"] for r in both}) == 2, str(both))
-check("FR-15 the Devices table names the broker of every iSpindel",
-      "Broker" in main.DEVICE_HEADERS and "zz_validation_broker" in json.dumps(
-          main.device_table(main.device_rows()).to_plotly_json(), default=str))
+devices_dump = json.dumps(main.device_table(main.device_rows()).to_plotly_json(), default=str)
+check("FR-15 the Devices table names the broker address of every iSpindel",
+      "Broker (address)" in main.DEVICE_HEADERS and "127.0.0.1:1884" in devices_dump
+      and "zz_validation_broker" in devices_dump,
+      "the added broker's address is in the table next to the own broker's")
+check("FR-15 the own broker's address is the one an iSpindel publishes to, not `localhost`",
+      "160.85.9.9:1883" in json.dumps(
+          main.device_table(main.device_rows(), "160.85.9.9").to_plotly_json(), default=str),
+      "host passed by update_dashboard() via broker_host()")
 
 alert, delta = main.toggle_broker(broker_id)
 check("FR-15 pausing a broker is stored (the ingest stops listening within one pass)",

@@ -69,6 +69,10 @@ step when a real iSpindel should be recorded:
 <engine> compose --profile ingest up -d ingest      # `up -d ingest` alone works too
 ```
 
+The profile has to be repeated for **every** command that addresses that service (`ps`, `logs`,
+`restart`, `exec`, `down`) - without it the provider does not see the service at all
+(`missing services [ingest]` / `no such service: ingest`).
+
 Now point the iSpindel at this machine - MQTT server = the LAN address, port `1883`:
 
 | OS | The LAN address |
@@ -88,12 +92,14 @@ profile stops the ingest as well - a plain `<engine> compose down` leaves it run
 
 ### Other iSpindels in use: their own brokers (FR-15)
 
-Each participant runs **their own** broker, so one broker is rarely enough. The small
-**MQTT brokers** button at the top right opens a dialog that adds one (label, host, port, topic
-prefix, optional user/password). For every broker the list shows how many iSpindels it delivered
-and what it does right now - *delivering*, *no message yet*, *silent since ...* or the
-connection error. A running ingest picks a broker up within `ingest.broker_refresh_seconds`
-(10 s) without a restart; pausing, editing or deleting it takes effect the same way.
+Each participant runs **their own** broker, so one broker is rarely enough. The **MQTT brokers**
+button at the bottom left of the *Devices* tab opens a dialog that adds one (label, host, port,
+topic prefix, optional user/password). For every broker the list shows how many iSpindels it
+delivered and what it does right now - *delivering*, *connected, no data yet*, *silent since ...*
+or the connection error. A running ingest picks a broker up within `ingest.broker_refresh_seconds`
+(10 s) without a restart; pausing, editing or deleting it takes effect the same way. The Devices
+tab itself names the **broker address** of every iSpindel (for the own broker the LAN address an
+iSpindel has to publish to, plus the label underneath).
 
 * The broker of `config.yml` is the first row and is **not** editable there - it stays in the file
   (NFR-08). Everything else is data: the added brokers live in the `mqtt_broker` table.
@@ -311,6 +317,7 @@ out in full inside a `className`/`extra` argument (Tailwind compiles from the ra
 | dashboard not reachable | `<engine> compose ps`, then `<engine> compose logs dashboard` |
 | no rows in the dashboard | is the ingest running? `<engine> compose ps` shows three containers - start it with `<engine> compose --profile ingest up -d ingest` (section 2) |
 | a broker stays at *no message yet* | the ingest must run **and** reach that address: `<engine> compose --profile ingest logs -f ingest` names every listener and its error (FR-15) |
+| `missing services [ingest]` / `no such service: ingest` | the ingest sits behind a profile: give **that** command the profile too (`ps`, `logs`, `restart`, `exec`, `down`). `restart` also needs an existing container - after a plain `up`, run `<engine> compose --profile ingest up -d ingest` instead |
 | no measurements arrive | `<engine> compose --profile ingest logs ingest` (prints every topic when `ingest.log_messages` is on), `<engine> compose logs broker` |
 | ingest stores nothing | is the database up? `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | stale UI after a class change | the CSS is baked into the image - run `cd assets && npm run css`, then `<engine> compose up -d --build` |

@@ -595,16 +595,22 @@ check("the dialog cannot close itself out of sync (no X / outside / Esc)",
 # trap needs its own test. It bit the FR-15 broker dialog: its form lived in an empty hidden div,
 # exactly what the device form of FR-12 documents - forms belong in the static layout.
 def layout_ids(root):
-    """Every string id the initial layout renders."""
+    """Every string id the initial layout renders.
+
+    A converted component keeps its id inside `props` (`{"type": "Div", "props": {"id": ...}}`); the
+    layout API also allows a plain `id`. Both are collected, and components are converted on the way
+    down (to_plotly_json() leaves nested children as component objects or repr strings).
+    """
     found = set()
 
     def walk(node):
         if hasattr(node, "to_plotly_json"):
             node = node.to_plotly_json()
         if isinstance(node, dict):
-            node_id = node.get("id")
-            if isinstance(node_id, str):
-                found.add(node_id)
+            for source in (node, node.get("props") or {}):
+                node_id = source.get("id")
+                if isinstance(node_id, str):
+                    found.add(node_id)
             for value in node.values():
                 walk(value)
         elif isinstance(node, (list, tuple)):

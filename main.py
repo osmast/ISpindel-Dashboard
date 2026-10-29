@@ -175,12 +175,6 @@ def layout():
         html.Div(id="msg", className="pointer-events-none fixed right-0 top-0 z-50 flex "
                                      "w-full max-w-sm flex-col gap-2 p-4"),
 
-        # FR-15: during the fermentation phase the participants run their own brokers - this small
-        # button opens the dialog that adds them (and shows which of them really deliver).
-        html.Div(className="flex items-center justify-end", children=[
-            ui.button("broker-open", "MQTT brokers", tone="light", compact=True),
-        ]),
-
         # FR-13 / FR-19: the iSpindel overview. It has no container box - the cards stand alone
         # on the page background (update_dashboard() replaces the children with a dmc.Grid).
         html.Div(id="devices"),
@@ -204,7 +198,15 @@ def layout():
             ]),
             dmc.TabsPanel(html.Div(id="exp-running"), value="running", pt="md"),
             dmc.TabsPanel(html.Div(id="exp-completed"), value="completed", pt="md"),
-            dmc.TabsPanel(html.Div(id="devices-table"), value="devices", pt="md"),
+            dmc.TabsPanel(children=[
+                html.Div(id="devices-table"),
+                # FR-15: the brokers of the other iSpindels sit at the bottom left of the Devices
+                # tab. It has to be the *static* layout: the button is a callback Input, and Dash
+                # validates those against the initial layout.
+                html.Div(className="mt-3 flex justify-start", children=[
+                    ui.button("broker-open", "MQTT brokers", tone="light", compact=True),
+                ]),
+            ], value="devices", pt="md"),
         ])),
 
         # FR-14 - FR-18: the comparison chart. It carries **no heading and no controls above it**
@@ -924,8 +926,28 @@ def experiment_table(rows, selected=(), empty="no data yet"):
 
 
 # FR-12: the device master data. A new iSpindel appears automatically (created by the ingest).
-DEVICE_HEADERS = ["Name (MQTT topic)", "Broker", "Display name", "Status", "First seen",
+DEVICE_HEADERS = ["Name (MQTT topic)", "Broker (address)", "Display name", "Status", "First seen",
                   "Last measurement", "Interval", "Measurements", "Actions"]
+
+
+def broker_cell(row, host=""):
+    """The broker of one device as an address plus its name (FR-15).
+
+    For the **own** broker the address is the one an iSpindel has to publish to: the LAN address of
+    this machine when the dashboard was opened through it (`host`, computed by `broker_host`). The
+    configured `localhost` (or the container-internal `broker`) would mislead - it is where *this*
+    process reaches the broker, not where the iSpindel does.
+    """
+    if row["broker_id"] is None:
+        address = f"{host or CFG['mqtt']['host']}:{CFG['mqtt']['port']}"
+        label = "own broker (config.yml)"
+    else:
+        address = f"{row['broker_host']}:{row['broker_port']}"
+        label = row["broker_label"] or "?"
+    return html.Div(children=[
+        html.Span(address, className="tabular-nums"),
+        html.Span(label, className="block text-xs text-slate-400"),
+    ])
 
 
 def device_actions(device_id):
@@ -943,22 +965,27 @@ def device_rows():
     """One row per device: the master data plus what its latest measurement reported.
 
     FR-15: the broker of every device is part of the row - the iSpindel name alone does not
-    identify a device any more once several brokers are in play.
+    identify a device any more once several brokers are in play. `broker_id IS NULL` means the
+    broker of config.yml, whose address is not in the database but in the configuration file.
     """
     return query("""SELECT d.id, d.mqtt_name, d.display_name, d.is_active, d.first_seen_at,
-                           l.recorded_at AS last_seen, l.interval_s, l.broker_label,
+                           l.recorded_at AS last_seen, l.interval_s,
+                           d.broker_id, b.label AS broker_label,
+                           b.host AS broker_host, b.port AS broker_port,
                            (SELECT count(*) FROM measurement m
                             WHERE m.device_id = d.id) AS measurements
                     FROM device d
                     LEFT JOIN v_device_latest l ON l.device_id = d.id
-                    ORDER BY l.broker_label NULLS FIRST, d.mqtt_name""")
+                    LEFT JOIN mqtt_broker b ON b.id = d.broker_id
+                    ORDER BY b.label NULLS FIRST, d.mqtt_name""")
 
 
 def device_table(rows, host=""):
-    """The FR-12 device overview: every iSpindel the system knows, with its settings action.
-    The empty state is the same "where to point an iSpindel" hint as the FR-13 overview."""
+    """The FR-12 device overview: every iSpindel the system knows, with the broker it publishes to
+    (FR-15) and its settings action. The empty state is the same "where to point an iSpindel" hint
+    as the FR-13 overview."""
     body = [[html.Span(r["mqtt_name"]),
-             r["broker_label"] or "config.yml",          # FR-15: NULL = the broker of config.yml
+             broker_cell(r, host),
              r["display_name"] or "-",
              ui.badge("in use", "green") if r["is_active"] else ui.badge("ignored", "slate"),
              f"{local(r['first_seen_at']):%d. %b %y %H:%M}",
@@ -998,15 +1025,26 @@ BROKER_HEADERS = ["Broker", "Address", "Topic prefix", "iSpindels", "State", "Ac
 
 
 def broker_rows():
-    """Every broker the ingest listens on (FR-15): config.yml first, then the added ones."""
+    """Every broker the ingest listens on (FR-15): config.yml first, then the added ones.
+
+    `last_stored` is the newest measurement of that broker's iSpindels. It is what makes the state
+    of the **own** broker visible: the ingest writes its connection state into `mqtt_broker`, and
+    the own broker has no row there (NFR-08 - it lives in config.yml).
+    """
     own = {"id": None, "label": "own broker (config.yml)", "is_config": True, "is_enabled": True,
            "host": CFG["mqtt"]["host"], "port": CFG["mqtt"]["port"],
            "topic_prefix": CFG["mqtt"]["topic_prefix"], "last_connected_at": None,
-           "last_message_at": None, "last_error": None,
-           "devices": query("SELECT count(*) AS n FROM device WHERE broker_id IS NULL")[0]["n"]}
+           "last_message_at": None, "last_error": None}
+    own.update(query("""SELECT (SELECT count(*) FROM device d WHERE d.broker_id IS NULL) AS devices,
+                               (SELECT max(m.recorded_at) FROM measurement m
+                                  JOIN device d ON d.id = m.device_id
+                                 WHERE d.broker_id IS NULL) AS last_stored""")[0])
     rows = query("""SELECT b.id, b.label, b.host, b.port, b.topic_prefix, b.is_enabled,
                            b.last_connected_at, b.last_message_at, b.last_error,
-                           (SELECT count(*) FROM device d WHERE d.broker_id = b.id) AS devices
+                           (SELECT count(*) FROM device d WHERE d.broker_id = b.id) AS devices,
+                           (SELECT max(m.recorded_at) FROM measurement m
+                              JOIN device d ON d.id = m.device_id
+                             WHERE d.broker_id = b.id) AS last_stored
                     FROM mqtt_broker b ORDER BY b.label""")
     for row in rows:
         row["is_config"] = False
@@ -1014,22 +1052,27 @@ def broker_rows():
 
 
 def broker_state(row):
-    """The state chip of one broker row: paused > error > delivering > silent (FR-15).
+    """The state chip of one broker row (FR-15): paused > error > delivering > silent/empty.
 
-    The values come from the ingest, which writes connection state and traffic back into
-    `mqtt_broker` - so the dialog shows whether the other participant's broker really delivers.
+    `delivering` is decided by the newest **stored** measurement of that broker's iSpindels, not by
+    the message counter alone: the own broker has no row the ingest could write into, so only the
+    database can tell whether it delivers. For an added broker the ingest additionally reports its
+    last received message and its connect time, which tells "connected, no data yet" apart from
+    "this broker was never reached".
     """
     if not row["is_enabled"]:
         return ui.badge("paused", "slate")
     if row["last_error"]:
         return ui.badge(row["last_error"][:38], "red")
-    last = row.get("last_message_at")
-    if last is None:
-        return ui.badge("no message yet", "amber")
-    age = (datetime.now(timezone.utc) - last).total_seconds()
+    stamps = [stamp for stamp in (row.get("last_message_at"), row.get("last_stored")) if stamp]
+    if not stamps:
+        return (ui.badge("connected, no data yet", "amber") if row.get("last_connected_at")
+                else ui.badge("no data yet", "slate"))
+    newest = max(stamps)
+    age = (datetime.now(timezone.utc) - newest).total_seconds()
     if age < 300:
         return ui.badge(f"delivering ({age:.0f} s ago)", "green")
-    return ui.badge(f"silent since {local(last):%d.%m. %H:%M}", "amber")
+    return ui.badge(f"silent since {local(newest):%d.%m. %H:%M}", "amber")
 
 
 def broker_actions(row):
