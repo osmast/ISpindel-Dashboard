@@ -200,9 +200,12 @@ def layout():
             dmc.TabsPanel(html.Div(id="exp-completed"), value="completed", pt="md"),
             dmc.TabsPanel(children=[
                 html.Div(id="devices-table"),
-                # FR-15: the brokers of the other iSpindels sit at the bottom left of the Devices
-                # tab. It has to be the *static* layout: the button is a callback Input, and Dash
-                # validates those against the initial layout.
+                # FR-15: the brokers are visible right here, without opening the dialog - a broker
+                # that is configured but not delivering (or not authorised) has no device row yet,
+                # so the devices table alone would look as if nothing had happened.
+                html.Div(id="broker-inline", className="mt-4"),
+                # and this button opens the dialog that changes the list. Static layout on purpose:
+                # it is a callback Input, and Dash validates those against the initial layout.
                 html.Div(className="mt-3 flex justify-start", children=[
                     ui.button("broker-open", "MQTT brokers", tone="light", compact=True),
                 ]),
@@ -1063,13 +1066,19 @@ def broker_state(row):
     if not row["is_enabled"]:
         return ui.badge("paused", "slate")
     if row["last_error"]:
-        return ui.badge(row["last_error"][:38], "red")
+        # the whole reason in a tooltip, a short chip in the table - "Not authorized" (the broker
+        # wants a user/password, mosquitto `allow_anonymous false`) must be readable at a glance
+        error = str(row["last_error"])
+        return dmc.Tooltip(label=error, position="top", withArrow=True, openDelay=200,
+                           children=ui.badge(f"not connected: {error[:30]}", "red"))
     stamps = [stamp for stamp in (row.get("last_message_at"), row.get("last_stored")) if stamp]
     if not stamps:
         return (ui.badge("connected, no data yet", "amber") if row.get("last_connected_at")
                 else ui.badge("no data yet", "slate"))
     newest = max(stamps)
-    age = (datetime.now(timezone.utc) - newest).total_seconds()
+    # a clock that runs ahead of the data (a Pi without NTP, or seeded future rows) must not print
+    # "delivering (-858508 s ago)" - the age of a future stamp is 0, not negative
+    age = max(0.0, (datetime.now(timezone.utc) - newest).total_seconds())
     if age < 300:
         return ui.badge(f"delivering ({age:.0f} s ago)", "green")
     return ui.badge(f"silent since {local(newest):%d.%m. %H:%M}", "amber")
@@ -1097,11 +1106,16 @@ def broker_actions(row):
     ])
 
 
-def broker_table(rows):
-    """The FR-15 list inside the dialog: one row per broker with its live state."""
-    body = [[html.Span(r["label"]), f"{r['host']}:{r['port']}", r["topic_prefix"],
-             str(r["devices"]), broker_state(r), broker_actions(r)] for r in rows]
-    return ui.table(BROKER_HEADERS, body, empty="no broker configured")
+def broker_table(rows, with_actions=True):
+    """The FR-15 broker list. `with_actions=False` is the read-only version that the Devices tab
+    shows next to the devices - editing happens in the dialog, which passes the ids it needs."""
+    headers = BROKER_HEADERS if with_actions else [h for h in BROKER_HEADERS if h != "Actions"]
+    body = []
+    for row in rows:
+        cells = [html.Span(row["label"]), f"{row['host']}:{row['port']}", row["topic_prefix"],
+                 str(row["devices"]), broker_state(row)]
+        body.append(cells + ([broker_actions(row)] if with_actions else []))
+    return ui.table(headers, body, empty="no broker configured")
 
 
 # (the FR-15 broker form is defined above, next to experiment_form/device_form: the static layout
@@ -1121,8 +1135,15 @@ def save_broker(broker_id, label, host, port, prefix, username, password, enable
     label, host = (label or "").strip(), (host or "").strip()
     if not label or not host:
         return ui.alert("a broker needs a label and a host (FR-15)", "amber"), 0
+    # "160.85.124.31:1883" pasted into the host field: take the port from the address, the port
+    # field stays the fallback. More than one colon means IPv6 (`::1`) and is left alone.
+    port_in_host = None
+    if host.count(":") == 1:
+        head, _, tail = host.partition(":")
+        if tail.strip().isdigit():
+            host, port_in_host = head.strip(), int(tail)
     try:
-        port = int(port or 1883)
+        port = port_in_host or int(port or 1883)
     except (TypeError, ValueError):
         return ui.alert("the port must be a number like 1883", "amber"), 0
     values = {"label": label, "host": host, "port": port,
@@ -1131,13 +1152,14 @@ def save_broker(broker_id, label, host, port, prefix, username, password, enable
               "password": (password or "").strip() or None,
               "enabled": bool(enabled)}
     refresh = CFG["ingest"]["broker_refresh_seconds"]
+    tail = f" (port {port} taken from the address)" if port_in_host else ""
     try:
         if broker_id is None:
             execute("""INSERT INTO mqtt_broker (label, host, port, topic_prefix, username,
                                                 password, is_enabled)
                        VALUES (%(label)s, %(host)s, %(port)s, %(topic_prefix)s, %(username)s,
                                %(password)s, %(enabled)s)""", values)
-            return ui.alert(f"broker '{label}' added - the ingest connects within {refresh} s "
+            return ui.alert(f"broker '{label}' added{tail} - the ingest connects within {refresh} s "
                             f"(FR-15)", "green"), 1
         values["id"] = broker_id
         execute("""UPDATE mqtt_broker SET label = %(label)s, host = %(host)s, port = %(port)s,
@@ -1145,7 +1167,7 @@ def save_broker(broker_id, label, host, port, prefix, username, password, enable
                           password = %(password)s, is_enabled = %(enabled)s,
                           last_error = NULL          -- the old failure does not belong to this
                       WHERE id = %(id)s""", values)
-        return ui.alert(f"broker '{label}' saved - the ingest reconnects within {refresh} s "
+        return ui.alert(f"broker '{label}' saved{tail} - the ingest reconnects within {refresh} s "
                         f"(FR-15)", "green"), 1
     except psycopg.errors.UniqueViolation:
         return ui.alert(f"a broker named '{label}' exists already (FR-15)", "amber"), 0
@@ -1646,6 +1668,18 @@ def update_broker_list(_, __, opened):
     if not opened:
         return dash.no_update
     return broker_table(broker_rows())
+
+
+@app.callback(Output("broker-inline", "children"),
+              Input("tick", "n_intervals"), Input("broker-reload", "data"))
+def update_broker_inline(_, __):
+    """The FR-15 broker list in the Devices tab (read-only - the dialog does the editing).
+
+    Always rendered, unlike the dialog's copy: a broker that is configured but not delivering, or
+    one the broker refuses (`not connected: ... Not authorized`), must be visible right where the
+    devices are.
+    """
+    return broker_table(broker_rows(), with_actions=False)
 
 
 def chart_window(range_key):

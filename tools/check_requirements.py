@@ -7,6 +7,7 @@ and deleted again before it exits; the script exits non-zero if any check fails.
 """
 import json
 import sys
+import time
 from datetime import timezone
 from pathlib import Path
 
@@ -109,6 +110,8 @@ own_state = json.dumps(main.broker_state(brokers[0]).to_plotly_json(), default=s
 if brokers[0].get("last_stored"):
     check("FR-15 the own broker shows a state derived from its newest stored measurement",
           "delivering" in own_state or "silent since" in own_state, own_state[:70])
+    check("FR-15 the broker state never counts a negative age (a clock ahead of the data)",
+          "(-" not in own_state, own_state[:70])
 else:
     print("INFO  the own broker has no measurement yet - its chip stays at 'no data yet'")
 
@@ -130,6 +133,18 @@ check("FR-15 a second broker with the same label is refused",
                        ["on"])[1] == 0)
 check("FR-15 a broker without a host is refused",
       main.save_broker(None, "zz_validation_nohost", "", 1883, "ispindel", "", "", ["on"])[1] == 0)
+# an address pasted into the host field ("160.85.124.31:1883") must not become a host name
+main.save_broker(None, "zz_validation_addr", "127.0.0.1:1885", 1883, "ispindel", "", "", ["on"])
+addr_row = main.query("SELECT host, port FROM mqtt_broker WHERE label = 'zz_validation_addr'")
+check("FR-15 an address pasted into the host field is split into host and port",
+      addr_row and addr_row[0]["host"] == "127.0.0.1" and addr_row[0]["port"] == 1885, str(addr_row))
+main.execute("DELETE FROM mqtt_broker WHERE label = 'zz_validation_addr'")
+
+# a connection the broker refuses ("Not authorized": it wants a user/password) must be readable
+refused = dict(main.broker_rows()[0], last_error="connect failed: Not authorized - retrying")
+refused_chip = json.dumps(main.broker_state(refused).to_plotly_json(), default=str)
+check("FR-15 a refused connection is shown as an error with its reason",
+      "not connected" in refused_chip and "Not authorized" in refused_chip, refused_chip[:80])
 
 # the ingest reads that very list while it runs (services/mqtt_service.py)
 import services.mqtt_service as ingest                                      # noqa: E402
@@ -138,6 +153,35 @@ enabled = main.query("SELECT count(*) AS n FROM mqtt_broker WHERE is_enabled")[0
 check("FR-15 the ingest listens on the own broker plus every enabled one",
       len(specs) == 1 + enabled and any(spec.get("port") == 1884 for spec in specs),
       f"{len(specs)} listener(s): " + ", ".join(f"{s['host']}:{s['port']}" for s in specs))
+
+# a connection error ("Not authorized") must survive the periodic traffic report - the supervisor
+# writes the same row every `broker_refresh_seconds`, and passing error=None wiped the reason
+refused_link = ingest.BrokerLink({"id": broker_id, "label": "zz_validation_broker",
+                                  "host": "127.0.0.1", "port": 1884, "topic_prefix": "ispindel"})
+refused_link.last_error = "connect failed: Not authorized - retrying"
+ingest.broker_status(refused_link, touched=0, error=refused_link.last_error)
+kept = main.query("SELECT last_error FROM mqtt_broker WHERE id = %s", (broker_id,))[0]["last_error"]
+check("FR-15 a connection error survives the periodic traffic report on the broker row",
+      kept == "connect failed: Not authorized - retrying", str(kept))
+refused_row = [r for r in main.broker_rows() if r["id"] == broker_id][0]
+check("FR-15 a refused broker shows the reason instead of 'no data yet'",
+      "not connected" in json.dumps(main.broker_state(refused_row).to_plotly_json(), default=str),
+      str(refused_row["last_error"]))
+
+
+# a broker that never answers must say so: a TCP-level failure (host down, wrong network) never
+# fires `on_connect`, so without the watchdog the row would keep reading "no data yet"
+class SilentLink:                       # a listener that has been trying for two minutes
+    started_at = time.time() - 120
+    last_error = None
+    client = type("DeadClient", (), {"is_connected": lambda self: False})()
+
+
+reach_error = ingest.link_error(SilentLink())
+check("FR-15 a broker that never answers is reported as unreachable",
+      reach_error and "reachable" in reach_error, str(reach_error))
+check("FR-15 a listener that just started is not called unreachable yet",
+      ingest.link_error(SilentLink(), grace=600) is None)
 
 # the same iSpindel name on another broker is its own device (never merged with the own broker's)
 main.execute("INSERT INTO device (mqtt_name) VALUES ('zz_validation') ON CONFLICT DO NOTHING")
@@ -155,6 +199,17 @@ check("FR-15 the own broker's address is the one an iSpindel publishes to, not `
       "160.85.9.9:1883" in json.dumps(
           main.device_table(main.device_rows(), "160.85.9.9").to_plotly_json(), default=str),
       "host passed by update_dashboard() via broker_host()")
+
+# the Devices tab carries the broker list as well (read-only), so a broker that is configured but
+# not delivering or refused by the broker is visible without opening the dialog
+layout_dump = json.dumps(main.app.layout.to_plotly_json(), default=str)
+check("FR-15 the Devices tab shows the broker list next to the devices",
+      "broker-inline" in layout_dump and "broker-open" in layout_dump
+      and "MQTT brokers" in layout_dump)
+inline_dump = json.dumps(main.broker_table(main.broker_rows(), with_actions=False)
+                         .to_plotly_json(), default=str)
+check("FR-15 the inline broker list is read-only (the dialog owns the editing)",
+      "broker-btn" not in inline_dump and "Actions" not in inline_dump, inline_dump[-120:])
 
 alert, delta = main.toggle_broker(broker_id)
 check("FR-15 pausing a broker is stored (the ingest stops listening within one pass)",

@@ -128,6 +128,22 @@ def spec_target(spec):
             spec.get("password") or None, spec.get("topic_prefix") or "ispindel")
 
 
+# After this many seconds a listener that never reached its broker is reported as unreachable: a
+# TCP-level failure (host down, wrong network, firewall) never fires `on_connect`, so without this
+# the dialog would show "no data yet" forever instead of naming the problem (FR-15).
+REACH_GRACE = 60
+
+
+def link_error(link, now=None, grace=REACH_GRACE):
+    """The reason a listener has no connection to its broker, or None while it is fine/too early."""
+    if link.client is None or link.client.is_connected():
+        return None
+    started = link.started_at
+    if started is None or ((now or time.time()) - started) < grace:
+        return None
+    return link.last_error or f"not connected after {grace} s - is the broker reachable?"
+
+
 def _ok(reason_code):
     """True when a paho reason code means success (API-v2 object or plain int)."""
     return getattr(reason_code, "value", reason_code) == 0
@@ -153,6 +169,7 @@ class BrokerLink:
         self.buffer = {}        # device name -> {"started": float, "fields": {field: raw string}}
         self.messages = 0       # transmissions since the last supervisor pass
         self.stopping = False   # set by stop(): a deliberate close is not a connection loss
+        self.started_at = None  # when the listener was started (for the reachability watchdog)
         self.last_error = None
         self.client = None
 
@@ -168,6 +185,7 @@ class BrokerLink:
         client.connect_async(self.host, self.port, keepalive=KEEPALIVE)
         client.loop_start()
         self.client = client
+        self.started_at = time.time()
         log.info("[%s] listening on %s/%s/%s (%s:%s) as %s", self.label, self.prefix, "+", "+",
                  self.host, self.port, self.client_id)
 
@@ -355,8 +373,12 @@ def main():
         while True:
             if time.time() >= next_pass:
                 links = sync_links(links)
-                for link in links.values():      # tell the dashboard that data is flowing
-                    broker_status(link, touched=link.messages)
+                for link in links.values():
+                    # tell the dashboard that data is flowing - and keep the error the connection
+                    # callback recorded (or the watchdog's "unreachable"), otherwise this pass would
+                    # wipe it and a broker that refuses the client would look like one without data
+                    broker_status(link, touched=link.messages,
+                                  error=link_error(link) or link.last_error)
                     link.messages = 0
                 # broker_refresh_seconds = 0 means "read the list once, at startup"
                 next_pass = time.time() + BROKER_REFRESH if BROKER_REFRESH > 0 else float("inf")

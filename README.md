@@ -103,12 +103,22 @@ iSpindel has to publish to, plus the label underneath).
 
 * The broker of `config.yml` is the first row and is **not** editable there - it stays in the file
   (NFR-08). Everything else is data: the added brokers live in the `mqtt_broker` table.
+* The devices tab shows the same list **inline** (below the devices, read-only) - so a broker that
+  is configured but not yet delivering is visible without opening the dialog.
+* A broker that wants a login answers `Not authorized`; the row then shows
+  **not connected: connect failed: Not authorized** - put the user and password into the form
+  (mosquitto's `allow_anonymous false`). A host that is down or in another network shows
+  **not connected after 60 s - is the broker reachable?**, because a TCP-level failure never reaches
+  the MQTT layer.
+* The host field also accepts a whole address (`160.85.124.31:1883`) - the port is taken from it.
 * Two participants may use the same iSpindel name on their own brokers - the name is unique **per
-  broker**, so the two stay two devices (the Devices tab names the broker of every iSpindel).
+  broker**, so the two stay two devices (the Devices tab names the broker **address** of every
+  iSpindel, with its label underneath).
 * An iSpindel should publish to **one** of the configured brokers. One that publishes to two of
   them is recorded twice, once per broker, because those are two independent sources.
-* The state values come from the ingest: while the ingest is not running they stay at their last
-  value.
+* The *delivering* state is derived from the newest **stored** measurement of that broker's
+  iSpindels - so it works for the own broker too, which has no row of its own. The connect/message
+  times shown next to it come from the ingest, and they only move while it runs.
 
 ### Something to look at first
 
@@ -191,7 +201,7 @@ $env:ISPINDEL_HTTP_PORT=8090; $env:ISPINDEL_PG_PORT=5434; docker compose up -d
 | the ingest as a one-off in the foreground (Ctrl-C stops it) | `<engine> compose --profile ingest run --rm ingest` |
 | stop the stack incl. the ingest (plain `down` leaves the ingest container behind) | `<engine> compose --profile ingest down` |
 | the ingest's log | `<engine> compose --profile ingest logs -f ingest` |
-| add / pause / delete another MQTT broker (FR-15) | the **MQTT brokers** button in the dashboard - no command |
+| add / pause / delete another MQTT broker (FR-15) | the **MQTT brokers** button at the bottom left of the *Devices* tab - no command |
 | is the database ready? | `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
 | the three self-tests | `<engine> compose exec -T dashboard python tools/check_requirements.py` etc. |
 | start (or update) with mock data | `<engine> compose --profile demo up -d --build` |
@@ -316,7 +326,7 @@ out in full inside a `className`/`extra` argument (Tailwind compiles from the ra
 | --- | --- |
 | dashboard not reachable | `<engine> compose ps`, then `<engine> compose logs dashboard` |
 | no rows in the dashboard | is the ingest running? `<engine> compose ps` shows three containers - start it with `<engine> compose --profile ingest up -d ingest` (section 2) |
-| a broker stays at *no message yet* | the ingest must run **and** reach that address: `<engine> compose --profile ingest logs -f ingest` names every listener and its error (FR-15) |
+| a broker stays at *no data yet* | it is configured but nothing was stored from it: `<engine> compose --profile ingest up -d ingest` must run (the ingest closes listeners when it is not), then look at the row's state - *not connected: Not authorized* means the broker wants a user/password |
 | `missing services [ingest]` / `no such service: ingest` | the ingest sits behind a profile: give **that** command the profile too (`ps`, `logs`, `restart`, `exec`, `down`). `restart` also needs an existing container - after a plain `up`, run `<engine> compose --profile ingest up -d ingest` instead |
 | no measurements arrive | `<engine> compose --profile ingest logs ingest` (prints every topic when `ingest.log_messages` is on), `<engine> compose logs broker` |
 | ingest stores nothing | is the database up? `<engine> compose exec -T db pg_isready -U ispindel -d ispindel` |
