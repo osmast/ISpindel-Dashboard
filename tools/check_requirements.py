@@ -208,6 +208,29 @@ ingest.on_disconnect(None, refused_stub, None, FailReason())
 check("FR-15 a refused connect keeps its reason instead of the generic disconnect text",
       refused_stub.last_error == "connect failed: Not authorized - retrying", refused_stub.last_error)
 
+# a broker can accept the connection and refuse the *subscription* (mosquitto `acl_file`): the ingest
+# then looks connected while nothing ever arrives - the SUBACK code 0x80 is the only trace of it
+class SubLink:
+    id = None
+    label = "zz_validation_sub"
+    prefix = "ispindel"                    # on_subscribe() logs it
+    last_error = None
+
+
+class GrantedCode:
+    def __init__(self, value):
+        self.value = value
+
+
+denied_link = SubLink()
+ingest.on_subscribe(None, denied_link, 1, [GrantedCode(0x80)])
+check("FR-15 a refused subscription is reported (the broker denies reading its topics)",
+      "subscription refused" in (denied_link.last_error or ""), str(denied_link.last_error))
+allowed_link = SubLink()
+ingest.on_subscribe(None, allowed_link, 1, [GrantedCode(0)])
+check("FR-15 a granted subscription leaves the broker healthy",
+      allowed_link.last_error is None, str(allowed_link.last_error))
+
 # the same iSpindel name on another broker is its own device (never merged with the own broker's)
 main.execute("INSERT INTO device (mqtt_name) VALUES ('zz_validation') ON CONFLICT DO NOTHING")
 main.execute("""INSERT INTO device (broker_id, mqtt_name) VALUES (%(id)s, 'zz_validation')
@@ -215,6 +238,20 @@ main.execute("""INSERT INTO device (broker_id, mqtt_name) VALUES (%(id)s, 'zz_va
 both = main.query("SELECT id, broker_id FROM device WHERE mqtt_name = 'zz_validation'")
 check("FR-15 the same iSpindel name on another broker is a second device",
       len(both) == 2 and len({r["broker_id"] for r in both}) == 2, str(both))
+
+
+# ... but the ingest stores a name through **one** broker only: a bridge or a mirrored broker that
+# carries the same iSpindel must not split its batch over two devices
+class NameLink:
+    def __init__(self, broker_id):
+        self.id = broker_id
+
+
+check("FR-15 only the broker that owns a name stores it (bridges create no duplicates)",
+      ingest.owns_name(NameLink(None), "zz_validation")
+      and not ingest.owns_name(NameLink(broker_id), "zz_validation")
+      and ingest.owns_name(NameLink(broker_id), "zz_validation_brandnew"),
+      "own broker wins, a new name is free")
 devices_dump = json.dumps(main.device_table(main.device_rows()).to_plotly_json(), default=str)
 check("FR-15 the Devices table names the broker address of every iSpindel",
       "Broker (address)" in main.DEVICE_HEADERS and "127.0.0.1:1884" in devices_dump

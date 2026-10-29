@@ -180,6 +180,7 @@ class BrokerLink:
             client.username_pw_set(self.username, self.password)
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
+        client.on_subscribe = on_subscribe
         client.on_message = on_message
         # connect_async + loop_start: a broker that does not answer must never block the service
         client.connect_async(self.host, self.port, keepalive=KEEPALIVE)
@@ -212,6 +213,24 @@ def on_connect(client, userdata, flags, reason_code, properties=None):
         link.last_error = f"connect failed: {reason_code}"
         log.warning("[%s] %s - retrying", link.label, link.last_error)
     broker_status(link, connected=_ok(reason_code), error=link.last_error)
+
+
+def on_subscribe(client, userdata, mid, reason_codes, properties=None):
+    """Log (and report to the dialog) what the broker granted for our subscription (FR-15).
+
+    A granted QoS of 0x80/128 means the broker **refused** the subscription. With mosquitto that
+    happens when the `acl_file` lets the user connect and publish but not read - and then the ingest
+    looks perfectly connected while nothing ever arrives, which is impossible to tell from the
+    outside. The row's error text names it instead.
+    """
+    link = userdata
+    codes = [getattr(code, "value", code) for code in reason_codes]
+    if any(code == 0x80 for code in codes):
+        link.last_error = "subscription refused (0x80) - this broker does not allow reading its topics"
+        log.error("[%s] %s", link.label, link.last_error)
+    else:
+        log.info("[%s] subscription granted (QoS %s) for %s/+/+", link.label, codes, link.prefix)
+    broker_status(link, error=link.last_error)
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties=None):
@@ -268,6 +287,19 @@ def broker_status(link, connected=False, error=None, touched=False):
             log.error("[%s] cannot store the broker state: %s", link.label, exc)
 
 
+def owns_name(link, name):
+    """True when `link` is the broker that owns this iSpindel name (FR-15).
+
+    The same iSpindel can be reachable through several brokers - a mosquitto bridge between two
+    brokers, or a participant who mirrors his broker. Its name then belongs to exactly one device:
+    the broker that reported it first (the own broker of config.yml wins a tie, then the oldest
+    row). Every other broker's copy is dropped, so a batch is never split over two devices.
+    """
+    rows = db_query("""SELECT broker_id FROM device WHERE mqtt_name = %(name)s
+                       ORDER BY broker_id IS NOT NULL, id LIMIT 1""", {"name": name})
+    return not rows or rows[0]["broker_id"] == link.id
+
+
 def store(link, name, burst):
     """Write exactly one measurement row for one transmission (FR-11).
 
@@ -276,6 +308,10 @@ def store(link, name, burst):
     created for the broker it published to (FR-15).
     """
     global conn
+    if not owns_name(link, name):        # the same device through a second broker (see owns_name)
+        log.info("ignored %s [%s]: this iSpindel already reports through another broker",
+                 name, link.label)
+        return
     row = build_row(link, name, burst["fields"], burst["started"])
     with LOCK:
         try:
