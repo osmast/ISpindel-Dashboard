@@ -165,6 +165,16 @@ app = dash.Dash(__name__, title="iSpindel Monitor", assets_ignore=r"\.pcss$",
                 assets_path_ignore=[r"node_modules"])
 server = app.server                                   # gunicorn entry point
 
+# The tab icon is the beer SVG instead of Dash's default favicon. Dash only links a file that is
+# literally called `favicon.ico` - and always with `type="image/x-icon"` (dash/dash.py) - so an
+# .svg cannot be dropped into assets/ like the fonts; it is wired up through the `{%favicon%}`
+# placeholder of the default index template. Decoration: no FR/NFR asks for a tab icon (NFR-05 is
+# about the language of the UI), so no requirement id is named here. The file itself is
+# `assets/favicon-beer.svg`; assets/ is served statically, so this is the whole wiring.
+app.index_string = app.index_string.replace(
+    "{%favicon%}",
+    f'<link rel="icon" type="image/svg+xml" href="{app.get_asset_url("favicon-beer.svg")}">')
+
 
 def layout():
     return ui.page([

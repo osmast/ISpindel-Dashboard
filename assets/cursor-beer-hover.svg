@@ -1,0 +1,36 @@
+<!-- The pointer while it is over something clickable: the same arrow, but filled like a glass of
+     beer - the amber body with a white head of foam on top and the bubbles of assets/bubbles.js
+     at its tail. Same tip and same hotspot (3 3) as `cursor-beer.svg`, so the affordance does not
+     change; only the look does. Decoration - no FR/NFR asks for a custom pointer (NFR-05 is about
+     the language of the UI), so no requirement id is named here.
+     `cursor-beer-hover.png` is the raster twin (rsvg-convert, 32x32) for Firefox and Safari. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="beer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7B733"/>
+      <stop offset="1" stop-color="#D98220"/>
+    </linearGradient>
+    <clipPath id="pointer">
+      <path d="M3 3 L3 21 L8.5 15.8 L12.2 23.6 L15.4 22.1 L11.8 14.4 L19 14.4 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- the fizz that comes up until the pointer leaves the element again -->
+  <circle cx="25" cy="26" r="4" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
+          stroke-width="1.2"/>
+  <circle cx="29.5" cy="21" r="2.4" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
+          stroke-width="1.1"/>
+  <circle cx="24" cy="18" r="1.5" fill="#FFFFFF" fill-opacity="0.8" stroke="#0057B7"
+          stroke-width="1"/>
+
+  <!-- the arrow, painted as beer: foam on top, amber below, CO2 rising through it -->
+  <g clip-path="url(#pointer)">
+    <rect x="0" y="0" width="32" height="32" fill="url(#beer)"/>
+    <rect x="0" y="0" width="32" height="11" fill="#FFFFFF"/>
+    <circle cx="8" cy="17" r="1.7" fill="#FFFFFF" opacity="0.92"/>
+    <circle cx="13" cy="20.5" r="1.1" fill="#FFFFFF" opacity="0.92"/>
+    <circle cx="6.5" cy="20" r="0.9" fill="#FFFFFF" opacity="0.92"/>
+  </g>
+  <path d="M3 3 L3 21 L8.5 15.8 L12.2 23.6 L15.4 22.1 L11.8 14.4 L19 14.4 Z" fill="none"
+        stroke="#0057B7" stroke-width="1.7" stroke-linejoin="round"/>
+</svg>

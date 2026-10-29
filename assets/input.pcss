@@ -132,3 +132,112 @@ details[data-card][open]::details-content {
 .toast-life {
   animation: toast-life 10s ease-out forwards;
 }
+
+/* The pointer is the beer arrow of assets/cursor-beer.svg/png. The raster file comes first,
+ * because only Chromium 122+/Edge understands an SVG cursor while Firefox and Safari fall through
+ * to the image and then to the normal pointer. The hotspot 3 3 is the tip of the arrow, so a click
+ * still lands where the tip points. Guarded by `pointer: fine` (NFR-06): a touch device has no
+ * cursor to restyle. */
+@media (pointer: fine) {
+  html {
+    cursor: url("cursor-beer.png") 3 3, url("cursor-beer.svg") 3 3, auto;
+  }
+
+  /* Hover stays in the theme: everything the browser would give a hand cursor gets the
+   * beer-filled arrow (assets/cursor-beer-hover.*) instead of the stock pointer. Same tip and same
+   * hotspot, so only the look changes - and it is the same set of elements that makes the trail of
+   * assets/bubbles.js fizz harder. These rules are deliberately plain CSS (not a Tailwind utility):
+   * an unlayered rule wins over the `cursor-pointer` utility the Python code puts on the rows. */
+  a,
+  button,
+  summary,
+  label,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="radio"],
+  [role="checkbox"],
+  [role="switch"],
+  .cursor-pointer {
+    cursor: url("cursor-beer-hover.png") 3 3, url("cursor-beer-hover.svg") 3 3, pointer;
+  }
+}
+
+/* The bubble trail of assets/bubbles.js: one fixed, click-through layer over the page (below the
+ * toast corner, above the content). A bubble has an outer element that rises and pops and an inner
+ * one that wobbles sideways and breathes, so the two transforms never fight each other. Only
+ * transform and opacity change, so the browser animates them on the compositor. */
+.beer-bubbles {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.beer-bubble {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  animation: bubble-rise 1200ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+/* the CO2 look; the script sets size, wobble speed and the outline of the wilder bubbles inline,
+ * so the variety comes from the data, not from a class per size */
+.beer-bubble-skin {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+              rgb(255 255 255 / 0.92), rgb(255 221 0 / 0.6) 45%, rgb(0 87 183 / 0.32) 100%);
+  box-shadow: inset 0 0 0 1px rgb(0 87 183 / 0.35);
+  animation: bubble-wobble 600ms ease-in-out infinite alternate;
+}
+
+/* the fat white foam bubbles in between, so the trail is not one colour */
+.beer-bubble-skin.is-foam {
+  background: radial-gradient(circle at 35% 30%,
+              rgb(255 255 255 / 0.98), rgb(255 255 255 / 0.55) 50%, rgb(255 221 0 / 0.4) 100%);
+}
+
+@keyframes bubble-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  12% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 0.85;
+    transform: translate(calc(-50% + var(--drift, 0px)),
+                         calc(-50% + var(--rise, -80px))) scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--drift, 0px)),
+                         calc(-50% + var(--rise, -80px))) scale(1.4);
+  }
+}
+
+@keyframes bubble-wobble {
+  from {
+    transform: translateX(-16%) scale(0.94);
+  }
+  to {
+    transform: translateX(16%) scale(1.06);
+  }
+}
+
+/* second guard next to the test in the script: no trail when motion is reduced (the same courtesy
+ * as the accordion and the animate-fade-in panels above) */
+@media (prefers-reduced-motion: reduce) {
+  .beer-bubbles {
+    display: none;
+  }
+}
+
