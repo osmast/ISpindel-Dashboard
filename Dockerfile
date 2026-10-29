@@ -2,7 +2,9 @@
 # (see compose.yaml). `config.yml` is not baked in: compose mounts it read-only (NFR-08).
 # There is no .dockerignore: this COPY list is the filter, so docs/, node_modules/ and the
 # deploy files never reach the image.
-FROM python:3.12-slim
+# Fully qualified image name (docker.io/library/...), so a Podman host never needs a short-name
+# alias from its /etc/containers/registries.conf - see the note at `db` in compose.yaml.
+FROM docker.io/library/python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

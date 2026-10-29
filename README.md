@@ -90,15 +90,18 @@ Everything seeded this way carries the `SIM_` prefix. Remove it again with
 
 | Service | Image / build | What it does | Reachable at |
 | --- | --- | --- | --- |
-| `db` | `postgres:16-alpine` | storage; applies `sql/schema.sql` on the first start | `127.0.0.1:5433` - **loopback only** |
-| `broker` | `eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` - LAN |
+| `db` | `docker.io/library/postgres:16-alpine` | storage; applies `sql/schema.sql` on the first start | `127.0.0.1:5433` - **loopback only** |
+| `broker` | `docker.io/library/eclipse-mosquitto:2` | receives the iSpindel (`deploy/mosquitto.conf`) | `<host>:1883` - LAN |
 | `ingest` | this repository (`Dockerfile`) | assembles the 7 messages of one transmission into one row | - |
 | `dashboard` | this repository (`Dockerfile`) | Plotly Dash behind gunicorn | `<host>:8080` - LAN |
 | `seed` | this repository (`Dockerfile`) | **only with `--profile demo`**: one-shot, seeds the simulated fleet and exits | - |
 
 The three official images are multi-arch, so the same `compose.yaml` runs on x86-64 and on the
-Raspberry Pi (arm64). `ingest` and `dashboard` are the **same image** and differ only in their
-`command`. The dashboard has **no authentication** - keep it inside the local network.
+Raspberry Pi (arm64). Their names are **fully qualified** (`docker.io/library/...`), so Podman
+never has to guess a registry: a bare `postgres:16-alpine` needs a short-name alias in the host's
+`/etc/containers/registries.conf` and fails on a fresh Raspberry Pi. `ingest` and `dashboard` are
+the **same image** and differ only in their `command`. The dashboard has **no authentication** -
+keep it inside the local network.
 
 ## 4 - Configuration
 
@@ -225,6 +228,7 @@ out in full inside a `className`/`extra` argument (Tailwind compiles from the ra
 | stale UI after a class change | the CSS is baked into the image - run `cd assets && npm run css`, then `<engine> compose up -d --build` |
 | changed `compose.yaml`, weird behaviour | `<engine> compose down && <engine> compose up -d` (a changed port/volume needs a recreate) |
 | port already in use | move it: `ISPINDEL_HTTP_PORT=8090` (see section 4) |
+| `short-name "postgres:16-alpine" did not resolve to an alias` (Podman) | the clone predates the fully qualified image names - `git pull`; `compose.yaml` names every image as `docker.io/library/...` |
 | "no container with ID or name" (Podman) | never remove containers by hand - always `compose down` |
 
 ## 10 - Repository layout

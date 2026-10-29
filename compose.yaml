@@ -1,4 +1,6 @@
-# The whole system as four containers (database, broker, ingest, dashboard).
+# The app stack: database, broker and dashboard (three containers) plus two optional services that
+# only start with a profile - `ingest` (records a real iSpindel, `--profile ingest`) and `seed`
+# (mock data, `--profile demo`).
 #
 #   podman compose up -d --build     (or `docker compose ...`) -> http://localhost:8080
 #
@@ -10,7 +12,10 @@ name: ispindel
 services:
 
   db:
-    image: postgres:16-alpine
+    # Fully qualified image name: a bare `postgres:16-alpine` needs a short-name alias in the
+    # host's /etc/containers/registries.conf and fails on a fresh Raspberry Pi with
+    #   Error: short-name "postgres:16-alpine" did not resolve to an alias ...
+    image: docker.io/library/postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ispindel
@@ -30,7 +35,7 @@ services:
       start_period: 20s
 
   broker:
-    image: eclipse-mosquitto:2
+    image: docker.io/library/eclipse-mosquitto:2    # fully qualified, see the note at `db`
     restart: unless-stopped
     volumes:
       - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -45,9 +50,20 @@ services:
       start_period: 5s
 
   # One MQTT transmission = 7 messages -> exactly one measurement row (FR-11).
+  #
+  # This service is NOT part of what a plain `up` starts (profile `ingest`): the dashboard, the
+  # demo data and every UI/self-test run without it - only a real iSpindel needs it. It stays
+  # defined here instead of in a raw `docker run` README line so that the DSN, the network and the
+  # mounts live in this one file (NFR-08).
+  #   <engine> compose --profile ingest up -d ingest      -> record the iSpindel, stays running
+  #   <engine> compose --profile ingest run --rm ingest   -> same, one-off in the foreground
+  #   <engine> compose --profile ingest down              -> stop the stack incl. the ingest
+  # `up -d ingest` alone works too (naming a service activates its profile); a plain
+  # `compose down` does NOT remove the ingest container.
   ingest:
     image: ispindel-monitor:latest
     build: .
+    profiles: ["ingest"]
     restart: unless-stopped
     command: python -u services/mqtt_service.py
     depends_on:
