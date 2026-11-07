@@ -221,10 +221,25 @@ def layout():
         # 20.10.2026 and taken back the same day - an empty chart shows "no measurements yet" and
         # the panel is where the FR-16/FR-18 controls live, so it should be there from the start.
         ui.card(None,
+                # FR-14/FR-17: the "upper legend" - the readout of the hovered timepoint. The
+                # values of every overlaid experiment at that moment are printed here instead of
+                # in Plotly's floating hover box, which used to cover the plot itself.
+                html.Div(id="chart-readout", className="mb-2"),
                 dcc.Graph(id="chart", config=GRAPH_CONFIG),
-                # FR-16/FR-18: the time axis and the time range sit under the figure (NFR-06).
+                # FR-16/FR-18/FR-20: the time axis, the time range and what is drawn sit under
+                # the figure (NFR-06).
                 html.Div(className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start "
                                    "sm:justify-between sm:gap-4", children=[
+                    ui.field("Show",
+                             dcc.RadioItems(id="chart-series", value="both",
+                                            options=[{"label": " gravity + temperature",
+                                                      "value": "both"},
+                                                     {"label": " gravity only", "value": "gravity"},
+                                                     {"label": " temperature only",
+                                                      "value": "temperature"}],
+                                            className="flex flex-wrap gap-3 text-sm",
+                                            labelClassName="flex min-h-11 cursor-pointer "
+                                                           "items-center")),
                     ui.field("Time axis",
                              dcc.RadioItems(id="relative", value="abs",
                                             options=[{"label": " absolute", "value": "abs"},
@@ -232,6 +247,14 @@ def layout():
                                             className="flex flex-wrap gap-3 text-sm",
                                             labelClassName="flex min-h-11 cursor-pointer "
                                                            "items-center")),
+                ]),
+                # FR-22: export every experiment overlaid in the chart (FR-17) as one CSV over
+                # the selected time range. The single-row export stays on the FR-21 `csv` icon.
+                html.Div(className="mt-3 flex justify-start", children=[
+                    ui.button("export-selected", "Export selected (CSV)",
+                              tone="grey", compact=True),
+                ]),
+                html.Div(className="mt-3 flex justify-start sm:justify-end", children=[
                     ui.field("Time range",
                              dcc.RadioItems(id="range", value="all",
                                             options=[{"label": f" {label}", "value": key}
@@ -242,6 +265,8 @@ def layout():
                 ])),
         # FR-21: the download target of the FR-05 row export (an invisible component).
         dcc.Download(id="download"),
+        # FR-22: the download target of the "Export selected" button (multi-experiment).
+        dcc.Download(id="download-multi"),
 
 
         # FR-01 - FR-04: the experiment dialog. It sits outside the device grid, which is rebuilt
@@ -255,6 +280,9 @@ def layout():
                 html.Div(id="modal-msg", className="mb-3"),
                 # rebuilt with the values of an existing experiment for FR-06 edit / delete
                 html.Div(id="exp-form", children=experiment_form()),
+                # FR-06: the per-measurement table (notes + delete) of the edited experiment; only
+                # shown in edit mode - empty and hidden otherwise
+                html.Div(id="exp-measurements", style={"display": "none"}),
                 # FR-12: the device fields, hidden until the Devices table opens the dialog
                 html.Div(id="dev-form", style={"display": "none"}, children=device_form()),
                 html.Div(className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end",
@@ -572,9 +600,12 @@ def plot(figure, className=""):
 
 
 def header_stat(value, className, title=""):
-    """One value in the card header, e.g. `27.1 °P`. `className` carries the text colour."""
+    """One value in the card header, e.g. `27.1 °P`. `className` carries the text colour - and, for
+    the battery, the visibility rule (`hidden lg:block`, NFR-06). The **size** is responsive here so
+    that the one-row header fits a phone: small by default, the desktop size from `lg`."""
     return html.Div(value, title=title or None,
-                    className="text-right text-lg font-semibold tabular-nums " + className)
+                    className="text-right text-sm font-semibold tabular-nums sm:text-base "
+                              "lg:text-lg " + className)
 
 
 def status_dot(warn):
@@ -744,6 +775,11 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                    "group rounded-xl corner-squircle border border-brand bg-white transition-colors"),
         children=[
             html.Summary(
+                # NFR-06: **one row at every width.** What makes it fit is the responsive type (the
+                # smaller size on a phone, the desktop size from `sm`) plus the battery - the least
+                # urgent number - which only appears from `lg`. The name shrinks and truncates last,
+                # and the numbers keep their size, so the row stays readable on a 360 px phone: name,
+                # gravity and temperature there, battery added on a wide screen.
                 className="flex cursor-pointer list-none items-center justify-between gap-3 "
                           "p-3 [&::-webkit-details-marker]:hidden sm:p-4",
                 children=[
@@ -751,8 +787,8 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                         html.Div(className="flex min-w-0 items-center gap-2", children=[
                             # FR-04: the experiment name while one runs (tooltip keeps the device)
                             html.H3(heading, title=f"iSpindel {name}" if running else None,
-                                    className="min-w-0 truncate text-base font-semibold "
-                                              "text-slate-800"),
+                                    className="min-w-0 truncate text-sm font-semibold "
+                                              "text-slate-800 sm:text-base"),
                             # FR-13/FR-19: the batch state and the health dot in one pill
                             status_chip(running, bool(warnings)),
                         ]),
@@ -763,8 +799,10 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                                     className="text-yellow-600 group-open:hidden"),
                         header_stat(f"{ui.num(temp, 1)} °C",
                                     className="text-purple-700 group-open:hidden"),
+                        # FR-19: the battery % - only where there is room for it
                         header_stat(f"{pct:.0f} %",
-                                    className=("text-amber-600" if low else "text-emerald-600")),
+                                    className=("hidden text-amber-600 lg:block" if low else
+                                               "hidden text-emerald-600 lg:block")),
                         # chevron: a corner rotated 45 deg points down, 225 deg points up
                         html.Span(className="ml-1 h-2 w-2 rotate-45 border-b-2 border-r-2 "
                                              "border-slate-400 transition-transform duration-200 "
@@ -790,18 +828,20 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                                                 "text-slate-800"),
                             html.Span("°P", className="text-sm text-slate-500"),
                         ]),
-                        # html.Span(f"(OG {value_text(og, ' °P')})",
-                        #             className="text-xs text-slate-400"),
-                        # html.Div(f"Target FG: ~{value_text(fg_target, ' °P' )}" if value_text else None,
-                        #          className="mt-1 text-xs text-slate-500"),
-                        # html.Div(className="text-xs text-slate-500", children=[
-                        #     "Rate: ",
-                        #     # falling gravity = running (green), rising = wrong (red), none if unknown
-                        #     html.Span(value_text(rate, " °P/24h"), className=(
-                        #         "font-medium text-emerald-600"
-                        #         if rate is not None and rate < 0 else
-                        #         "font-medium text-red-600" if rate is not None else "")),
-                        # ]),
+                        # FR-20: the batch's OG and the derived target FG (og * (1 - attenuation))
+                        html.Span(f"(OG {value_text(og, ' °P')})",
+                                  className="text-xs text-slate-400"),
+                        html.Div(f"Target FG: ~{value_text(fg_target, ' °P')}"
+                                 if fg_target is not None else None,
+                                 className="mt-1 text-xs text-slate-500"),
+                        html.Div(className="text-xs text-slate-500", children=[
+                            "Rate: ",
+                            # falling gravity = running (green), rising = wrong (red), none if unknown
+                            html.Span(value_text(rate, " °P/24h"), className=(
+                                "font-medium text-emerald-600"
+                                if rate is not None and rate < 0 else
+                                "font-medium text-red-600" if rate is not None else "")),
+                        ]),
                     ), span={"base": 12, "sm": 4}),
                     # TEMPERATURE: reading, target window of the style, deviation
                     dmc.GridCol(ui.zone(
@@ -815,11 +855,12 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                                 if hint and hint[1] == "high" else
                                 "text-xs font-medium text-sky-700" if hint and hint[1] == "low" else
                                 "text-xs font-medium text-emerald-600")) if hint else None,
-                            # html.Span("°C", className="text-sm text-slate-500"),
+                            html.Span("°C", className="text-sm text-slate-500"),
                         ]),
-                        # html.Div(f"Target: {target_span[0]:.1f}\u2013{target_span[1]:.1f} °C"
-                        #          if target_span else None,
-                        #          className="mt-1 text-xs text-slate-500"),
+                        # FR-20: the target temperature window of the beer style
+                        html.Div(f"Target: {target_span[0]:.1f}\u2013{target_span[1]:.1f} °C"
+                                 if target_span else None,
+                                 className="mt-1 text-xs text-slate-500"),
                     ), span={"base": 12, "sm": 4}),
                     # ATTENUATION & ABV (FR-20)
                     dmc.GridCol(ui.zone(
@@ -833,14 +874,13 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                                         className="text-2xl font-semibold tabular-nums "
                                                 "text-slate-800"),
                         ]),
-                        # html.Span("Atten", className="text-xs text-slate-500"),
-                        # html.Span("ABV", className="text-xs text-slate-500"),
-                        # html.Div(f"Est. Final: {value_text(est_abv, '% ABV')}",
-                        #          className="mt-1 text-xs text-slate-500"),
+                        # FR-20: the estimated final ABV at the configured attenuation
+                        html.Div(f"Est. Final: {value_text(est_abv, '% ABV')}",
+                                 className="mt-1 text-xs text-slate-500"),
                     ), span={"base": 12, "sm": 4}),
                 ]),
                 plot(charts.fermentation_figure(series, height=None, legend=False,
-                                                mobile=mobile),
+                                                mobile=mobile, hover_overlay=True),
                      className="h-60 sm:h-52"),
                 # FR-01 - FR-04: the experiment controls (end / set up) of this iSpindel
                 html.Div(className="mt-3 flex flex-wrap items-center justify-between gap-2",
@@ -930,6 +970,115 @@ def experiment_table(rows, selected=(), empty="no data yet"):
              row_actions(r["id"], running=r["is_active"], selected=r["id"] in selected)]
             for r in rows]
     return ui.table(TABLE_HEADERS, body, empty=empty)
+
+# FR-06: the measurements of one experiment, editable inside the experiment dialog. Each row can
+# carry a note of its own and can be removed; removing the newest row shortens the experiment
+# (its end time follows the last remaining measurement).
+MEAS_HEADERS = ["Time (local)", "Tilt °", "Temp °C", "Gravity °P", "Battery V", "Note", ""]
+
+
+def measurement_rows(exp_id):
+    """Every measurement of an experiment, oldest first (FR-06)."""
+    return query("""SELECT id, recorded_at,
+                           tilt_deg::float8 AS tilt_deg,
+                           temp_c::float8 AS temp_c,
+                           gravity_plato::float8 AS gravity_plato,
+                           battery_v::float8 AS battery_v,
+                           note
+                    FROM measurement WHERE experiment_id = %s
+                    ORDER BY recorded_at""", (exp_id,))
+
+
+def measurement_form(exp_id):
+    """FR-06: the per-measurement table of the edited experiment (notes + a delete icon).
+
+    Every note is an `Input` (`meas-input`) whose value the callback reads as State; a save icon
+    (`meas-save`) writes it and a trash icon (`meas-del`) removes the row. The ids are pattern ids
+    that must match `experiment_action` exactly.
+    """
+    rows = measurement_rows(exp_id)
+    if not rows:
+        return html.Div(children=[
+            html.H3("Measurements", className="mb-2 text-xs font-semibold uppercase tracking-wider "
+                                              "text-slate-500"),
+            html.P("this experiment has no measurements yet", className="text-sm text-slate-400"),
+        ])
+    body = []
+    for r in rows:
+        def icon(kind, icon_name, label, colour):
+            return dmc.Tooltip(
+                label=label, position="top", withArrow=True, openDelay=300,
+                children=dmc.ActionIcon(
+                    DashIconify(icon=icon_name, width=15),
+                    id={"type": kind, "meas": r["id"]},
+                    variant="subtle", color=colour, size="sm", radius="md",
+                    **{"aria-label": label}))
+
+        body.append([
+            f"{local(r['recorded_at']):%d. %b %y %H:%M:%S}",
+            ui.num(r["tilt_deg"], 1),
+            ui.num(r["temp_c"], 2),
+            ui.num(r["gravity_plato"], 2),
+            ui.num(r["battery_v"], 3),
+            dcc.Input(id={"type": "meas-input", "meas": r["id"]}, value=r["note"] or "",
+                      placeholder="note ...", persistence=False,
+                      className="w-full min-w-[8rem] rounded-md corner-squircle border "
+                                "border-slate-300 px-2 py-1 text-sm"),
+            html.Div(className="flex items-center gap-1", children=[
+                icon("meas-save", "tabler:device-floppy", "save the note", "gray"),
+                icon("meas-del", "tabler:trash", "delete this measurement", "red"),
+            ]),
+        ])
+    return html.Div(children=[
+        html.H3("Measurements", className="mb-2 text-xs font-semibold uppercase tracking-wider "
+                                          "text-slate-500"),
+        html.P("edit a note and save it, or delete a row. Deleting the newest measurement moves "
+               "the end time of a completed experiment to the last remaining one (FR-06).",
+               className="mb-2 text-xs text-slate-400"),
+        ui.table(MEAS_HEADERS, body),
+    ])
+
+
+def save_measurement_note(meas_id, note):
+    """FR-06: store the note of one measurement. Returns (alert, reload_delta)."""
+    rows = query("SELECT id FROM measurement WHERE id = %s", (meas_id,))
+    if not rows:
+        return ui.alert("that measurement no longer exists", "amber"), 0
+    text = note.strip() or None if isinstance(note, str) else None
+    execute("UPDATE measurement SET note = %s WHERE id = %s", (text, meas_id))
+    return ui.alert("note saved (FR-06)", "green"), 1
+
+
+def delete_measurement(meas_id):
+    """FR-06: delete one measurement. Returns (alert, reload_delta).
+
+    When the deleted row was the **newest** of its experiment, the experiment's end time follows
+    down to the last remaining measurement - deleting the tail rows is what makes an experiment
+    shorter, and the stored end time must tell the same story (FR-04/FR-06). A completed
+    experiment is shortened; a running one (`ended_at IS NULL`) is left alone.
+    """
+    rows = query("""SELECT experiment_id, recorded_at FROM measurement WHERE id = %s""", (meas_id,))
+    if not rows:
+        return ui.alert("that measurement no longer exists", "amber"), 0
+    exp_id, removed_at = rows[0]["experiment_id"], rows[0]["recorded_at"]
+    execute("DELETE FROM measurement WHERE id = %s", (meas_id,))
+    tail = ""
+    if exp_id is not None:
+        exp = query("SELECT started_at, ended_at FROM experiment WHERE id = %s", (exp_id,))
+        newest = query("SELECT max(recorded_at) AS last FROM measurement WHERE experiment_id = %s",
+                       (exp_id,))[0]["last"]
+        if exp and exp[0]["ended_at"] is not None and (newest is None
+                                                       or newest < exp[0]["ended_at"]):
+            # the end time has to stay after the start (schema CHECK); anchor it at the newest row
+            if newest is not None and newest > exp[0]["started_at"]:
+                execute("UPDATE experiment SET ended_at = %s WHERE id = %s", (newest, exp_id))
+                tail = f" - end time moved to {local(newest):%d. %b %y %H:%M}"
+            elif newest is None:
+                tail = " - no measurements left, the end time stays"
+    return ui.alert(f"measurement removed (FR-06){tail}", "green"), 1
+
+
+
 
 
 # FR-12: the device master data. A new iSpindel appears automatically (created by the ingest).
@@ -1467,6 +1616,8 @@ def delete_experiment(exp_id):
               # against the initial layout, so the (hidden) device fields must exist too.
               Output("exp-form", "children"), Output("exp-form", "style"),
               Output("dev-form", "children"), Output("dev-form", "style"),
+              # FR-06: the per-measurement table of the edited experiment
+              Output("exp-measurements", "children"), Output("exp-measurements", "style"),
               Output("msg", "children"), Output("modal-msg", "children"), Output("reload", "data"),
               # FR-21: the CSV row action writes the download here
               Output("download", "data"),
@@ -1475,6 +1626,9 @@ def delete_experiment(exp_id):
               Input({"type": "row-btn", "exp": ALL, "mode": ALL}, "n_clicks"),
               # FR-12: the settings / delete icons of a row in the Devices table
               Input({"type": "dev-btn", "device": ALL, "mode": ALL}, "n_clicks"),
+              # FR-06: the save / delete icons of the per-measurement table
+              Input({"type": "meas-save", "meas": ALL}, "n_clicks"),
+              Input({"type": "meas-del", "meas": ALL}, "n_clicks"),
               Input("exp-cancel", "n_clicks"), Input("exp-submit", "n_clicks"),
               State("exp-target", "data"),
               State("new-name", "value"), State("new-start", "value"), State("new-style", "value"),
@@ -1489,10 +1643,16 @@ def delete_experiment(exp_id):
               # FR-12: the fields of the device dialog (the same modal, a different form)
               State("dev-name", "value"), State("dev-active", "value"),
               State({"type": "dev-btn", "device": ALL, "mode": ALL}, "id"),
+              # FR-06: the note inputs and the id lists of the measurement save / delete icons
+              State({"type": "meas-input", "meas": ALL}, "value"),
+              State({"type": "meas-save", "meas": ALL}, "id"),
+              State({"type": "meas-del", "meas": ALL}, "id"),
               prevent_initial_call=True)
-def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, target, name, start,
+def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, save_clicks, del_clicks,
+                      _, __, target, name, start,
                       style, og, yeast, responsible, notes, reload_data, setup_ids, end_ids,
-                      row_ids, range_key, dev_name, dev_active, dev_ids):
+                      row_ids, range_key, dev_name, dev_active, dev_ids,
+                      meas_values, meas_save_ids, meas_del_ids):
     """One callback for everything that writes `exp-modal.opened` (Dash allows one callback per
     output): open the dialog, create, edit, delete, cancel, end, plus the csv row action (FR-21;
     the chart action is swallowed here and handled by `toggle_chart`, FR-17). `exp-target` holds
@@ -1502,28 +1662,38 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
     triggered = ctx.triggered_id
     target = target or {}
 
-    # the 12 outputs in order: exp-target, opened, title, submit label, exp-form children/style,
-    # dev-form children/style, msg, modal-msg, reload, download.
+    # the 14 outputs in order: exp-target, opened, title, submit label, exp-form children/style,
+    # dev-form children/style, exp-measurements children/style, msg, modal-msg, reload, download.
     hidden, shown = {"display": "none"}, {"display": "block"}
 
     def shape(*, target=dash.no_update, opened_=dash.no_update, title=dash.no_update,
               label=dash.no_update, exp_form=dash.no_update, exp_style=dash.no_update,
-              dev_form=dash.no_update, dev_style=dash.no_update, message=dash.no_update,
+              dev_form=dash.no_update, dev_style=dash.no_update, meas_form=dash.no_update,
+              meas_style=dash.no_update, message=dash.no_update,
               dialog=dash.no_update, reload_value=None, download=dash.no_update):
-        return (target, opened_, title, label, exp_form, exp_style, dev_form, dev_style, message,
-                dialog, reload_data if reload_value is None else reload_value, download)
+        return (target, opened_, title, label, exp_form, exp_style, dev_form, dev_style, meas_form,
+                meas_style, message, dialog,
+                reload_data if reload_value is None else reload_value, download)
 
-    def opened(state, title, label, form, message="", device=False):
-        """Open the dialog - on the experiment form by default, on the device form for FR-12."""
+    def opened(state, title, label, form, message="", device=False, measurements=None):
+        """Open the dialog - on the experiment form by default, on the device form for FR-12.
+
+        `measurements` (FR-06) is the per-measurement table of an edited experiment; it stays
+        hidden for every other mode (create / end / device).
+        """
+        meas = measurements if measurements is not None else []
+        meas_shown = shown if measurements is not None else hidden
         if device:
             return shape(target=state, opened_=True, title=title, label=label, dev_form=form,
-                         dev_style=shown, exp_style=hidden, dialog=message)
+                         dev_style=shown, exp_style=hidden, meas_form=[], meas_style=hidden,
+                         dialog=message)
         return shape(target=state, opened_=True, title=title, label=label, exp_form=form,
-                     exp_style=shown, dev_style=hidden, dialog=message)
+                     exp_style=shown, dev_style=hidden, meas_form=meas, meas_style=meas_shown,
+                     dialog=message)
 
     def closed(message="", delta=0):
         return shape(target=None, opened_=False, message=message, dialog="",
-                     reload_value=reload_data + delta)
+                     meas_form=[], meas_style=hidden, reload_value=reload_data + delta)
 
     def nothing():
         return shape()
@@ -1601,7 +1771,28 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, _, __, t
                           ui.alert(f"delete '{values['name']}' and its {measurements} "
                                    f"measurements? This cannot be undone.", "red"))
         return opened({"mode": "edit", "id": triggered.get("exp")},
-                      "Edit experiment", "Save changes", experiment_form(values))
+                      "Edit experiment", "Save changes", experiment_form(values),
+                      measurements=measurement_form(triggered.get("exp")))
+    if isinstance(triggered, dict) and triggered.get("type") in ("meas-save", "meas-del"):
+        # FR-06: the icons of the per-measurement table (guarded like the rest - a rebuild mounts
+        # them with n_clicks = 0). The note input of a row keeps the user's typing; only a save
+        # writes it, so a delete never discards a neighbour's edit silently.
+        if triggered.get("type") == "meas-del":
+            if not clicked(triggered, meas_del_ids, del_clicks):
+                return nothing()
+            alert, delta = delete_measurement(triggered.get("meas"))
+        else:
+            if not clicked(triggered, meas_save_ids, save_clicks):
+                return nothing()
+            values = dict(zip([m.get("meas") for m in click_values(meas_save_ids)],
+                              click_values(meas_values)))
+            alert, delta = save_measurement_note(triggered.get("meas"),
+                                                 values.get(triggered.get("meas")))
+        # re-render the table of the experiment this row belongs to (exp-target holds its id)
+        fresh = measurement_form(target.get("id")) if target.get("mode") == "edit" else []
+        return shape(meas_form=fresh,
+                     meas_style=shown if target.get("mode") == "edit" else hidden,
+                     message=ui.toast(alert), reload_value=reload_data + delta)
     if isinstance(triggered, dict) and triggered.get("type") == "dev-btn":
         # FR-12: the icons of a Devices-table row (guarded by `clicked()` like the rest)
         if not clicked(triggered, dev_ids, dev_clicks):
@@ -1762,12 +1953,13 @@ def chart_window(range_key):
 
 @app.callback(Output("chart", "figure"),
               Input("tick", "n_intervals"), Input("chart-select", "data"),
-              Input("relative", "value"), Input("range", "value"), Input("viewport", "data"))
-def update_chart(_, ids, axis, range_key, viewport):
+              Input("relative", "value"), Input("range", "value"), Input("viewport", "data"),
+              Input("chart-series", "value"))
+def update_chart(_, ids, axis, range_key, viewport, series_pick):
     # FR-17: `ids` are the experiments toggled on in the FR-05 table (`chart-select`).
     mobile = (viewport or {}).get("mobile", False)   # FR-14/NFR-06: drop legend/titles on a phone
     if not ids:
-        return charts.fermentation_figure([], mobile=mobile)
+        return charts.fermentation_figure([], mobile=mobile, series_pick=series_pick or "both")
     rows = query("""SELECT e.id, e.name, m.recorded_at,
                            m.gravity_plato::float8 AS gravity_plato,
                            m.temp_c::float8 AS temp_c
@@ -1787,7 +1979,53 @@ def update_chart(_, ids, axis, range_key, viewport):
         entry["points"].append(row)
     # FR-16: `chart_window` pins the x axis to the whole range (FR-18 uses hours since start)
     return charts.fermentation_figure(series, relative=(axis == "rel"), mobile=mobile,
-                                      x_range=chart_window(range_key))
+                                      x_range=chart_window(range_key),
+                                      series_pick=series_pick or "both")
+
+
+@app.callback(Output("chart-readout", "children"),
+              Input("chart", "hoverData"), Input("relative", "value"))
+def update_readout(hover, axis):
+    """FR-14/FR-17: the "upper legend" - the values of every series at the hovered timepoint.
+
+    Plotly's floating unified hover box is turned off in `charts.fermentation_figure`
+    (`hover_overlay=False`), because it covered the plot. Instead the hovered values are printed
+    here, above the figure, where the legend already sits - so hovering never hides the curve.
+    `customdata` of every point carries [value, unit, label]; with the unified hover every trace at
+    that x arrives in one payload. The time is rendered in local time (NFR-09).
+    """
+    if not hover or not hover.get("points"):
+        return html.Div("hover the chart to read every series at one timepoint",
+                        className="text-xs text-slate-400")
+    points = hover["points"]
+    stamp = points[0].get("x")
+    if axis == "rel" and isinstance(stamp, (int, float)):
+        when = f"{stamp:.2f} h since start"
+    elif hasattr(stamp, "strftime"):
+        when = f"{local(stamp):%d.%m. %H:%M}"
+    else:
+        when = str(stamp)
+    chips = []
+    for p in points:
+        custom = p.get("customdata")
+        value, unit, label = (custom + [None])[:3] if isinstance(custom, list) else (None, None, None)
+        text = ui.num(value, 1)
+        chips.append(html.Span(className="inline-flex items-baseline gap-1 rounded-md "
+                                         "corner-squircle border border-slate-200 bg-slate-50 "
+                                         "px-2 py-0.5", children=[
+            # the marker colour is the trace colour, so a chip matches its curve (FR-15)
+            html.Span(className="inline-block h-2 w-2 rounded-full",
+                      style={"background": p.get("marker.color")
+                             or (p.get("line") or {}).get("color") or p.get("color")
+                             or "#0f172a"}),
+            html.Span(f"{label}: ", className="text-xs text-slate-500"),
+            html.Span(f"{text}{unit or ''}", className="text-xs font-semibold tabular-nums "
+                                                       "text-slate-800"),
+        ]))
+    return html.Div(className="flex flex-wrap items-center gap-2", children=[
+        html.Span(f"{when} ·", className="text-xs font-medium text-slate-600"),
+        *chips,
+    ])
 
 
 def download_csv(ids, range_key):
@@ -1820,6 +2058,23 @@ def download_csv(ids, range_key):
     return (dcc.send_string(rows_to_csv(rows), filename),
             ui.alert(f"exported {len(rows)} measurements ({RANGE_TEXT.get(range_key)}), "
                      f"file: {filename}", "green"))
+
+
+# FR-22: several experiments and/or a time range in one file. The experiments are the ones
+# overlaid in the comparison chart (FR-17, `chart-select`), the range is the FR-16 radio. This
+# is a callback of its own so the FR-21 row export stays untouched; `allow_duplicate` lets it
+# write the shared page toast (`msg`) and it has its own download target (`download-multi`).
+@app.callback(Output("download-multi", "data"),
+              Output("msg", "children", allow_duplicate=True),
+              Input("export-selected", "n_clicks"),
+              State("chart-select", "data"), State("range", "value"),
+              prevent_initial_call=True)
+def export_selected(_, ids, range_key):
+    """FR-22: export every experiment overlaid in the comparison chart as one CSV."""
+    if not _:
+        return dash.no_update, dash.no_update
+    data, alert = download_csv(ids, range_key)
+    return data, ui.toast(alert)
 
 
 if __name__ == "__main__":

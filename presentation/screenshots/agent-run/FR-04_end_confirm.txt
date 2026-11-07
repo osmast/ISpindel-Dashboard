@@ -1,0 +1,324 @@
+experiment 'zz_agent_completed' updated (FR-06)
+SIM_A1_3
+89 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.9
+°P
+TEMPERATURE
+23.4
+▲ 2.4 High
+ATTENUATION & ABV
+12.1%
+|
+1.1%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A1
+End experiment
+tilt 37.0° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:03:05 (29:57 ago) · upcoming: overdue
+SIM_A2_3
+93 %
+GRAVITY °P | °P 24H
+15.1
+|
+2.9
+°P
+TEMPERATURE
+22.4
+▲ 1.4 High
+ATTENUATION & ABV
+2.5%
+|
+0.2%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A2
+End experiment
+tilt 31.5° · RSSI -63 dBm · interval 900 s
+last: 07.11. 16:00:05 (32:57 ago) · upcoming: overdue
+SIM_B1_3
+94 %
+GRAVITY °P | °P 24H
+13.6
+|
+5.6
+°P
+TEMPERATURE
+21.2
+✓ in range
+ATTENUATION & ABV
+0.1%
+|
+0.0%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B1
+End experiment
+tilt 30.1° · RSSI -62 dBm · interval 900 s
+last: 07.11. 16:03:05 (29:57 ago) · upcoming: overdue
+SIM_B2_2
+67 %
+no data for 815 min (more than three intervals of 900 s)
+GRAVITY °P | °P 24H
+5.5
+|
+-0.8
+°P
+TEMPERATURE
+17.9
+▼ 0.1 Low
+ATTENUATION & ABV
+57.8%
+|
+4.1%
+Oct 282026
+Oct 30
+Nov 1
+Nov 3
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B2
+End experiment
+tilt 65.0° · RSSI -63 dBm · interval 900 s
+last: 07.11. 02:57:05 (815:57 ago) · upcoming: overdue
+SIM_C1_3
+78 %
+GRAVITY °P | °P 24H
+12.6
+|
+-2.1
+°P
+TEMPERATURE
+12.2
+✓ in range
+ATTENUATION & ABV
+23.0%
+|
+2.1%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C1
+End experiment
+tilt 50.3° · RSSI -64 dBm · interval 900 s
+last: 07.11. 16:03:05 (29:57 ago) · upcoming: overdue
+SIM_C2_3
+85 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.5
+°P
+TEMPERATURE
+13.7
+✓ in range
+ATTENUATION & ABV
+13.5%
+|
+1.2%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C2
+End experiment
+tilt 42.5° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:00:05 (32:57 ago) · upcoming: overdue
+zz_agent_20261107153235
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+-
+°P
+TEMPERATURE
+20.0
+✓ in range
+ATTENUATION & ABV
+17.2%
+|
+1.4%
+15:30:34.895Nov 7, 2026
+15:30:34.8955
+15:30:34.896
+12
+14
+16
+18
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+zz_agent_dev
+End experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:27 ago) · upcoming: in 12:33
+zz_agent_dev2
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+-
+°P
+TEMPERATURE
+20.0
+ATTENUATION & ABV
+-
+|
+-
+15:30:34.9085Nov 7, 2026
+15:30:34.909
+15:30:34.9095
+15:30:34.91
+12
+14
+16
+18
+20
+time (local)
+gravity (°P) · temperature (°C)
+no experiment yet
+Set up experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:27 ago) · upcoming: in 12:33
+zz_agent_dev3
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+0.3
+°P
+TEMPERATURE
+20.0
+ATTENUATION & ABV
+-
+|
+-
+Nov 12026
+Nov 3
+Nov 5
+Nov 7
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+no experiment yet
+Set up experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:27 ago) · upcoming: in 12:33
+Running (7)
+Completed (12)
+Devices (9)
+NAME	ISPINDEL	START TIMESTAMP	STATUS	MEASUREMENTS	BEER STYLE	OG °P	YEAST	RESPONSIBLE	END TIMESTAMP	ACTIONS
+zz_agent_20261107153235	zz_agent_dev	07. Nov 26 16:32	active	0	West Coast IPA	14.5	US-05	Agent	-	
+
+SIM_B1_3	SIM_B1	07. Nov 26 15:48	active	5	Hefeweizen	13.6	S-04	tools/simulate.py	-	
+
+SIM_A2_3	SIM_A2	07. Nov 26 03:00	active	53	West Coast IPA	15.4	SIM yeast	tools/simulate.py	-	
+
+SIM_A1_3	SIM_A1	06. Nov 26 13:48	active	106	West Coast IPA	15.8	SIM yeast	tools/simulate.py	-	
+
+SIM_C2_3	SIM_C2	05. Nov 26 15:00	active	197	Bock (cold cellar)	16.0	SIM yeast	tools/simulate.py	-	
+
+SIM_C1_3	SIM_C1	05. Nov 26 01:48	active	250	Bock (cold cellar)	16.4	SIM yeast	tools/simulate.py	-	
+
+SIM_B2_2	SIM_B2	02. Nov 26 10:12	active	452	Hefeweizen	13.2	SIM yeast	tools/simulate.py	-	
+hover the chart to read every series at one timepoint
+−1
+0
+1
+2
+3
+4
+5
+6
+−1
+0
+1
+2
+3
+4
+time (local)
+gravity (°P) · temperature (°C)
+no measurements yet
+Show
+gravity + temperature
+gravity only
+temperature only
+Time axis
+absolute
+hours since start
+Time range
+entire experiment
+last 7 days
+last 24 h
+End experiment
+end the running experiment 'zz_agent_20261107153235' on this iSpindel? The end time is stored as now and new measurements are no longer assigned to it (FR-04).
+Name (unique)
+Start (empty = now, else 2026-11-12T16:30)
+
+These fields may stay empty and can be completed later (FR-06):
+
+Beer style
+Original gravity °P
+−
++
+Yeast
+Responsible
+Notes
+Cancel
+End experiment

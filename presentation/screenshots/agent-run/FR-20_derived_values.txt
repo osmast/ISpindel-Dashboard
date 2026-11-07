@@ -1,0 +1,259 @@
+SIM_A1_3
+89 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.9
+°P
+(OG 15.8 °P)
+Target FG: ~3.2 °P
+Rate: -1.9 °P/24h
+TEMPERATURE
+23.4
+▲ 2.4 High
+°C
+Target: 19.0–21.0 °C
+ATTENUATION & ABV
+12.1%
+|
+1.1%
+Est. Final: 6.9% ABV
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A1
+End experiment
+tilt 37.0° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:03:05 (41:59 ago) · upcoming: overdue
+SIM_A2_3
+93 %
+GRAVITY °P | °P 24H
+15.1
+|
+2.9
+°P
+(OG 15.4 °P)
+Target FG: ~3.1 °P
+Rate: 2.9 °P/24h
+TEMPERATURE
+22.4
+▲ 1.4 High
+°C
+Target: 19.0–21.0 °C
+ATTENUATION & ABV
+2.5%
+|
+0.2%
+Est. Final: 6.7% ABV
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A2
+End experiment
+tilt 31.5° · RSSI -63 dBm · interval 900 s
+last: 07.11. 16:00:05 (44:59 ago) · upcoming: overdue
+SIM_B1_3
+94 %
+GRAVITY °P | °P 24H
+13.6
+|
+5.6
+°P
+(OG 13.6 °P)
+Target FG: ~2.7 °P
+Rate: 5.6 °P/24h
+TEMPERATURE
+21.2
+✓ in range
+°C
+Target: 18.0–22.0 °C
+ATTENUATION & ABV
+0.1%
+|
+0.0%
+Est. Final: 5.8% ABV
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B1
+End experiment
+tilt 30.1° · RSSI -62 dBm · interval 900 s
+last: 07.11. 16:03:05 (41:59 ago) · upcoming: overdue
+SIM_B2_2
+67 %
+no data for 827 min (more than three intervals of 900 s)
+GRAVITY °P | °P 24H
+5.5
+|
+-0.8
+°P
+(OG 13.2 °P)
+Target FG: ~2.6 °P
+Rate: -0.8 °P/24h
+TEMPERATURE
+17.9
+▼ 0.1 Low
+°C
+Target: 18.0–22.0 °C
+ATTENUATION & ABV
+57.8%
+|
+4.1%
+Est. Final: 5.6% ABV
+Oct 282026
+Oct 30
+Nov 1
+Nov 3
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B2
+End experiment
+tilt 65.0° · RSSI -63 dBm · interval 900 s
+last: 07.11. 02:57:05 (827:59 ago) · upcoming: overdue
+SIM_C1_3
+78 %
+GRAVITY °P | °P 24H
+12.6
+|
+-2.1
+°P
+(OG 16.4 °P)
+Target FG: ~3.3 °P
+Rate: -2.1 °P/24h
+TEMPERATURE
+12.2
+✓ in range
+°C
+Target: 10.0–14.0 °C
+ATTENUATION & ABV
+23.0%
+|
+2.1%
+Est. Final: 7.1% ABV
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C1
+End experiment
+tilt 50.3° · RSSI -64 dBm · interval 900 s
+last: 07.11. 16:03:05 (41:59 ago) · upcoming: overdue
+SIM_C2_3
+85 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.5
+°P
+(OG 16.1 °P)
+Target FG: ~3.2 °P
+Rate: -1.5 °P/24h
+TEMPERATURE
+13.7
+✓ in range
+°C
+Target: 10.0–14.0 °C
+ATTENUATION & ABV
+13.5%
+|
+1.2%
+Est. Final: 7.0% ABV
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C2
+End experiment
+tilt 42.5° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:00:05 (44:59 ago) · upcoming: overdue
+Running (6)
+Completed (11)
+Devices (6)
+NAME	ISPINDEL	START TIMESTAMP	STATUS	MEASUREMENTS	BEER STYLE	OG °P	YEAST	RESPONSIBLE	END TIMESTAMP	ACTIONS
+SIM_B1_3	SIM_B1	07. Nov 26 15:48	active	5	Hefeweizen	13.6	S-04	tools/simulate.py	-	
+
+SIM_A2_3	SIM_A2	07. Nov 26 03:00	active	53	West Coast IPA	15.4	SIM yeast	tools/simulate.py	-	
+
+SIM_A1_3	SIM_A1	06. Nov 26 13:48	active	106	West Coast IPA	15.8	SIM yeast	tools/simulate.py	-	
+
+SIM_C2_3	SIM_C2	05. Nov 26 15:00	active	197	Bock (cold cellar)	16.0	SIM yeast	tools/simulate.py	-	
+
+SIM_C1_3	SIM_C1	05. Nov 26 01:48	active	250	Bock (cold cellar)	16.4	SIM yeast	tools/simulate.py	-	
+
+SIM_B2_2	SIM_B2	02. Nov 26 10:12	active	452	Hefeweizen	13.2	SIM yeast	tools/simulate.py	-	
+hover the chart to read every series at one timepoint
+−1
+0
+1
+2
+3
+4
+5
+6
+−1
+0
+1
+2
+3
+4
+time (local)
+gravity (°P) · temperature (°C)
+no measurements yet
+Show
+gravity + temperature
+gravity only
+temperature only
+Time axis
+absolute
+hours since start
+Export selected (CSV)
+Time range
+entire experiment
+last 7 days
+last 24 h

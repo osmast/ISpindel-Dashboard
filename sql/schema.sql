@@ -79,6 +79,8 @@ CREATE TABLE measurement (
     temp_raw      numeric(6,3),
     temp_unit     text,
     received_at   timestamptz NOT NULL DEFAULT now(),
+    -- FR-06: a note the user can attach to a single measurement (e.g. "bubbling stopped")
+    note          text,
     UNIQUE (device_id, recorded_at)                          -- FR-11: no duplicate rows
 );
 CREATE INDEX measurement_exp_time_idx ON measurement (experiment_id, recorded_at);

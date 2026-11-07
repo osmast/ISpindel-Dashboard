@@ -1,0 +1,95 @@
+exported 418 measurements (entire experiment), file: SIM_B1_2.csv
+SIM_A1_3
+13.9 °P
+23.4 °C
+89 %
+SIM_A2_3
+15.1 °P
+22.4 °C
+93 %
+SIM_B1_3
+13.6 °P
+21.2 °C
+94 %
+SIM_B2_2
+5.5 °P
+17.9 °C
+67 %
+SIM_C1_3
+12.6 °P
+12.2 °C
+78 %
+SIM_C2_3
+13.9 °P
+13.7 °C
+85 %
+zz_agent_dev
+12.0 °P
+20.0 °C
+67 %
+zz_agent_dev2
+12.0 °P
+20.0 °C
+67 %
+zz_agent_dev3
+12.0 °P
+20.0 °C
+67 %
+Running (6)
+Completed (13)
+Devices (9)
+NAME	ISPINDEL	START TIMESTAMP	STATUS	MEASUREMENTS	BEER STYLE	OG °P	YEAST	RESPONSIBLE	END TIMESTAMP	ACTIONS
+zz_agent_20261107153235	zz_agent_dev	07. Nov 26 16:32	completed	0	West Coast IPA	14.5	US-05	Agent	07. Nov 26 16:33	
+
+SIM_B1_2	SIM_B1	01. Nov 26 22:00	completed	418	Hefeweizen	13.5	S-04	tools/simulate.py	06. Nov 26 05:24	
+
+SIM_A2_2	SIM_A2	31. Oct 26 22:12	completed	356	West Coast IPA	15.4	SIM yeast	tools/simulate.py	04. Nov 26 15:00	
+
+SIM_A1_2	SIM_A1	31. Oct 26 09:00	completed	322	West Coast IPA	15.7	SIM yeast	tools/simulate.py	03. Nov 26 17:24	
+
+SIM_C2_2	SIM_C2	30. Oct 26 22:12	completed	481	Bock (cold cellar)	16.0	SIM yeast	tools/simulate.py	04. Nov 26 22:12	
+
+SIM_C1_2	SIM_C1	30. Oct 26 09:00	completed	466	Bock (cold cellar)	16.3	SIM yeast	tools/simulate.py	04. Nov 26 05:24	
+
+zz_agent_completed	zz_agent_dev3	28. Oct 26 17:32	completed	2	West Coast IPA	14.5	S-04	Agent	31. Oct 26 16:32	
+
+SIM_B2_1	SIM_B2	26. Oct 26 17:24	completed	370	Hefeweizen	13.0	SIM yeast	tools/simulate.py	30. Oct 26 13:48	
+
+SIM_B1_1	SIM_B1	26. Oct 26 04:12	completed	337	Hefeweizen	13.4	SIM yeast	tools/simulate.py	29. Oct 26 16:12	
+
+SIM_A2_1	SIM_A2	25. Oct 26 17:24	completed	418	West Coast IPA	15.2	SIM yeast	tools/simulate.py	30. Oct 26 01:48	
+
+SIM_C2_1	SIM_C2	25. Oct 26 05:24	completed	481	Bock (cold cellar)	15.8	SIM yeast	tools/simulate.py	30. Oct 26 05:24	
+
+SIM_A1_1	SIM_A1	25. Oct 26 04:12	completed	385	West Coast IPA	15.6	SIM yeast	tools/simulate.py	29. Oct 26 04:12	
+
+SIM_C1_1	SIM_C1	24. Oct 26 17:12	completed	481	Bock (cold cellar)	16.2	SIM yeast	tools/simulate.py	29. Oct 26 16:12	
+hover the chart to read every series at one timepoint
+−1
+0
+1
+2
+3
+4
+5
+6
+−1
+0
+1
+2
+3
+4
+time (local)
+gravity (°P) · temperature (°C)
+no measurements yet
+Show
+gravity + temperature
+gravity only
+temperature only
+Time axis
+absolute
+hours since start
+Time range
+entire experiment
+last 7 days
+last 24 h

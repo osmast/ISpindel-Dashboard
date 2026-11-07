@@ -45,8 +45,13 @@ def card(title, *children):
     ] if title else []
     return html.Section(
         # animate-fade-in: the panel fades in when the page renders (see assets/input.pcss)
-        className="animate-fade-in motion-reduce:animate-none rounded-xl corner-squircle border "
-                  "border-brand bg-white p-4 shadow-sm md:p-5",
+        # `min-w-0` + `overflow-x-clip` (NFR-06): a panel is a flex item of the page column, and
+        # without them a wide child - the FR-05 table, which scrolls inside its own box - still
+        # widened the **page** below ~730 px, so a phone could be scrolled sideways although the
+        # table itself was fine. `clip` and not `hidden`: it does not turn the panel into a scroll
+        # container, so nothing inside starts scrolling vertically.
+        className="animate-fade-in motion-reduce:animate-none min-w-0 overflow-x-clip rounded-xl "
+                  "corner-squircle border border-brand bg-white p-4 shadow-sm md:p-5",
         children=[*heading, *children],
     )
 

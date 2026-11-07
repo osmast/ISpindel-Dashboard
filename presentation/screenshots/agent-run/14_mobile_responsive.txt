@@ -1,0 +1,70 @@
+SIM_A1_3
+13.9 °P
+23.4 °C
+SIM_A2_3
+15.1 °P
+22.4 °C
+SIM_B1_3
+13.6 °P
+21.2 °C
+SIM_B2_2
+5.5 °P
+17.9 °C
+SIM_C1_3
+12.6 °P
+12.2 °C
+SIM_C2_3
+13.9 °P
+13.7 °C
+zz_agent_dev
+12.0 °P
+20.0 °C
+zz_agent_dev2
+12.0 °P
+20.0 °C
+zz_agent_dev3
+12.0 °P
+20.0 °C
+Running (6)
+Completed (13)
+Devices (9)
+NAME	ISPINDEL	START TIMESTAMP	STATUS	MEASUREMENTS	BEER STYLE	OG °P	YEAST	RESPONSIBLE	END TIMESTAMP	ACTIONS
+SIM_B1_3	SIM_B1	07. Nov 26 15:48	active	5	Hefeweizen	13.6	S-04	tools/simulate.py	-	
+
+SIM_A2_3	SIM_A2	07. Nov 26 03:00	active	53	West Coast IPA	15.4	SIM yeast	tools/simulate.py	-	
+
+SIM_A1_3	SIM_A1	06. Nov 26 13:48	active	106	West Coast IPA	15.8	SIM yeast	tools/simulate.py	-	
+
+SIM_C2_3	SIM_C2	05. Nov 26 15:00	active	197	Bock (cold cellar)	16.0	SIM yeast	tools/simulate.py	-	
+
+SIM_C1_3	SIM_C1	05. Nov 26 01:48	active	250	Bock (cold cellar)	16.4	SIM yeast	tools/simulate.py	-	
+
+SIM_B2_2	SIM_B2	02. Nov 26 10:12	active	452	Hefeweizen	13.2	SIM yeast	tools/simulate.py	-	
+hover the chart to read every series at one timepoint
+−1
+0
+1
+2
+3
+4
+5
+−1
+0
+1
+2
+3
+4
+time
+°P · °C
+no measurements yet
+Show
+gravity + temperature
+gravity only
+temperature only
+Time axis
+absolute
+hours since start
+Time range
+entire experiment
+last 7 days
+last 24 h

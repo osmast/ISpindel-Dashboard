@@ -9,7 +9,7 @@ FONT_FAMILY = '"IBM XGA-AI 12x20", ui-monospace, "SFMono-Regular", Menlo, Consol
 
 
 def fermentation_figure(series, relative=False, height=460, legend=True, mobile=False,
-                        x_range=None):
+                        x_range=None, series_pick="both", hover_overlay=False):
     """Gravity and temperature over time, on one y axis.
 
     series = [{"label": str, "points": [{"recorded_at", "gravity_plato", "temp_c"}]}].
@@ -17,6 +17,11 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
     to the container. `legend`/`mobile` hide the legend; mobile also shortens the axis titles
     (NFR-06). x_range = (start, end) pins the x axis to the selected time range (FR-16) so the
     empty time before an experiment's first measurement stays visible; ignored when `relative`.
+
+    `series_pick` chooses what is drawn: "both" (gravity + temperature), "gravity" or
+    "temperature". `hover_overlay=False` (the default) hides Plotly's floating hover box and
+    instead feeds every trace's value into `customdata`, so the dashboard can print the readout
+    of the hovered timepoint **above the figure** (the upper legend) instead of over the plot.
     """
     if mobile:
         legend = False
@@ -24,7 +29,14 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
         xaxis_title = "hours" if mobile else "hours since start"
     else:
         xaxis_title = "time" if mobile else "time (local)"
-    yaxis_title = "°P · °C" if mobile else "gravity (°P) · temperature (°C)"
+    show_gravity = series_pick in ("both", "gravity")
+    show_temp = series_pick in ("both", "temperature")
+    if show_gravity and not show_temp:
+        yaxis_title = "°P" if mobile else "gravity (°P)"
+    elif show_temp and not show_gravity:
+        yaxis_title = "°C" if mobile else "temperature (°C)"
+    else:
+        yaxis_title = "°P · °C" if mobile else "gravity (°P) · temperature (°C)"
 
     fig = go.Figure()
     for i, s in enumerate(series):
@@ -37,13 +49,19 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
             x = [p["recorded_at"] for p in points]
         # markers turn a dense series into a fat band - draw them only while they stay readable
         markers = len(points) <= 200
-        fig.add_trace(go.Scatter(
-            x=x, y=[p["gravity_plato"] for p in points], name=f"{s['label']} (°P)",
-            mode="lines+markers" if markers else "lines", line=dict(color=color),
-            marker=dict(size=5, color=color, line=dict(width=1, color="white"))))
-        fig.add_trace(go.Scatter(
-            x=x, y=[p["temp_c"] for p in points], name=f"{s['label']} (°C)",
-            mode="lines", line=dict(color=color, dash="dot"), opacity=0.6))
+        # customdata carries the raw values so the upper readout can print them without a second
+        # query; the number format is applied in the dashboard, not here
+        if show_gravity:
+            fig.add_trace(go.Scatter(
+                x=x, y=[p["gravity_plato"] for p in points], name=f"{s['label']} (°P)",
+                customdata=[[p["gravity_plato"], "°P", s["label"]] for p in points],
+                mode="lines+markers" if markers else "lines", line=dict(color=color),
+                marker=dict(size=5, color=color, line=dict(width=1, color="white"))))
+        if show_temp:
+            fig.add_trace(go.Scatter(
+                x=x, y=[p["temp_c"] for p in points], name=f"{s['label']} (°C)",
+                customdata=[[p["temp_c"], "°C", s["label"]] for p in points],
+                mode="lines", line=dict(color=color, dash="dot"), opacity=0.6))
 
     if not series:
         fig.add_annotation(text="no measurements yet", showarrow=False,
@@ -59,9 +77,14 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
         showlegend=legend,
         font=dict(family=FONT_FAMILY, size=10 if mobile else 12),
         hovermode="x unified",
-        # opaque dark box - the default unified hover box is a translucent light grey
+        # Before: an opaque dark box floating over the plot. Now the values are printed above the
+        # figure (`hover_overlay=False`), so the box is made fully transparent and only the spike
+        # remains; `hover_overlay=True` keeps the old floating box (used by the small device cards,
+        # which have no readout strip of their own).
         hoverlabel=dict(bgcolor="#0f172a", bordercolor="#0f172a", namelength=-1,
-                        font=dict(color="#f8fafc", size=11)),
+                        font=dict(color="#f8fafc", size=11)) if hover_overlay else
+                   dict(bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)", namelength=-1,
+                        font=dict(color="rgba(0,0,0,0)", size=11)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         # transparent so the card's background (and its hover colour) shows through
         paper_bgcolor="rgba(0,0,0,0)",

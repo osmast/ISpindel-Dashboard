@@ -1,0 +1,345 @@
+SIM_A1_3
+89 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.9
+°P
+TEMPERATURE
+23.4
+▲ 2.4 High
+ATTENUATION & ABV
+12.1%
+|
+1.1%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A1
+End experiment
+tilt 37.0° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:03:05 (30:18 ago) · upcoming: overdue
+SIM_A2_3
+93 %
+GRAVITY °P | °P 24H
+15.1
+|
+2.9
+°P
+TEMPERATURE
+22.4
+▲ 1.4 High
+ATTENUATION & ABV
+2.5%
+|
+0.2%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+25
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_A2
+End experiment
+tilt 31.5° · RSSI -63 dBm · interval 900 s
+last: 07.11. 16:00:05 (33:18 ago) · upcoming: overdue
+SIM_B1_3
+94 %
+GRAVITY °P | °P 24H
+13.6
+|
+5.6
+°P
+TEMPERATURE
+21.2
+✓ in range
+ATTENUATION & ABV
+0.1%
+|
+0.0%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B1
+End experiment
+tilt 30.1° · RSSI -62 dBm · interval 900 s
+last: 07.11. 16:03:05 (30:18 ago) · upcoming: overdue
+SIM_B2_2
+67 %
+no data for 816 min (more than three intervals of 900 s)
+GRAVITY °P | °P 24H
+5.5
+|
+-0.8
+°P
+TEMPERATURE
+17.9
+▼ 0.1 Low
+ATTENUATION & ABV
+57.8%
+|
+4.1%
+Oct 282026
+Oct 30
+Nov 1
+Nov 3
+Nov 5
+5
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_B2
+End experiment
+tilt 65.0° · RSSI -63 dBm · interval 900 s
+last: 07.11. 02:57:05 (816:18 ago) · upcoming: overdue
+SIM_C1_3
+78 %
+GRAVITY °P | °P 24H
+12.6
+|
+-2.1
+°P
+TEMPERATURE
+12.2
+✓ in range
+ATTENUATION & ABV
+23.0%
+|
+2.1%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C1
+End experiment
+tilt 50.3° · RSSI -64 dBm · interval 900 s
+last: 07.11. 16:03:05 (30:18 ago) · upcoming: overdue
+SIM_C2_3
+85 %
+GRAVITY °P | °P 24H
+13.9
+|
+-1.5
+°P
+TEMPERATURE
+13.7
+✓ in range
+ATTENUATION & ABV
+13.5%
+|
+1.2%
+Oct 272026
+Oct 30
+Nov 2
+Nov 5
+10
+12
+14
+16
+time (local)
+gravity (°P) · temperature (°C)
+iSpindel:
+SIM_C2
+End experiment
+tilt 42.5° · RSSI -60 dBm · interval 900 s
+last: 07.11. 16:00:05 (33:18 ago) · upcoming: overdue
+zz_agent_dev
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+-
+°P
+TEMPERATURE
+20.0
+ATTENUATION & ABV
+-
+|
+-
+15:30:34.895Nov 7, 2026
+15:30:34.8955
+15:30:34.896
+12
+14
+16
+18
+20
+time (local)
+gravity (°P) · temperature (°C)
+no experiment yet
+Set up experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:48 ago) · upcoming: in 12:12
+zz_agent_dev2
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+-
+°P
+TEMPERATURE
+20.0
+ATTENUATION & ABV
+-
+|
+-
+15:30:34.9085Nov 7, 2026
+15:30:34.909
+15:30:34.9095
+15:30:34.91
+12
+14
+16
+18
+20
+time (local)
+gravity (°P) · temperature (°C)
+no experiment yet
+Set up experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:48 ago) · upcoming: in 12:12
+zz_agent_dev3
+67 %
+GRAVITY °P | °P 24H
+12.0
+|
+0.3
+°P
+TEMPERATURE
+20.0
+ATTENUATION & ABV
+-
+|
+-
+Nov 12026
+Nov 3
+Nov 5
+Nov 7
+10
+15
+20
+time (local)
+gravity (°P) · temperature (°C)
+no experiment yet
+Set up experiment
+tilt 55.0° · RSSI -55 dBm · interval 900 s
+last: 07.11. 16:30:34 (2:48 ago) · upcoming: in 12:12
+Running (6)
+Completed (13)
+Devices (9)
+NAME (MQTT TOPIC)	BROKER (ADDRESS)	DISPLAY NAME	STATUS	FIRST SEEN	LAST MEASUREMENT	INTERVAL	MEASUREMENTS	ACTIONS
+SIM_A1	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_A1, group A)	in use	07. Nov 26 16:12	07. Nov 26 16:03	900 s	813	
+
+SIM_A2	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_A2, group A)	in use	07. Nov 26 16:12	07. Nov 26 16:00	900 s	827	
+
+SIM_B1	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_B1, group B)	in use	07. Nov 26 16:12	07. Nov 26 16:03	900 s	760	
+
+SIM_B2	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_B2, group B)	in use	07. Nov 26 16:12	07. Nov 26 02:57	900 s	822	
+
+SIM_C1	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_C1, group C)	in use	07. Nov 26 16:12	07. Nov 26 16:03	900 s	1197	
+
+SIM_C2	
+localhost:1883
+own broker (config.yml)
+	simulated (SIM_C2, group C)	in use	07. Nov 26 16:12	07. Nov 26 16:00	900 s	1159	
+
+zz_agent_dev	
+localhost:1883
+own broker (config.yml)
+	-	in use	07. Nov 26 16:32	07. Nov 26 16:30	900 s	1	
+
+zz_agent_dev2	
+localhost:1883
+own broker (config.yml)
+	-	in use	07. Nov 26 16:32	07. Nov 26 16:30	900 s	1	
+
+zz_agent_dev3	
+localhost:1883
+own broker (config.yml)
+	-	in use	07. Nov 26 16:32	07. Nov 26 16:30	900 s	3	
+BROKER	ADDRESS	TOPIC PREFIX	ISPINDELS	STATE
+own broker (config.yml)	localhost:1883	ispindel	9	delivering (166 s ago)
+MQTT brokers
+hover the chart to read every series at one timepoint
+−1
+0
+1
+2
+3
+4
+5
+6
+−1
+0
+1
+2
+3
+4
+time (local)
+gravity (°P) · temperature (°C)
+no measurements yet
+Show
+gravity + temperature
+gravity only
+temperature only
+Time axis
+absolute
+hours since start
+Time range
+entire experiment
+last 7 days
+last 24 h
+MQTT brokers
+BROKER	ADDRESS	TOPIC PREFIX	ISPINDELS	STATE	ACTIONS
+own broker (config.yml)	localhost:1883	ispindel	9	delivering (166 s ago)	config.yml
+Close
+Add broker
+Save broker

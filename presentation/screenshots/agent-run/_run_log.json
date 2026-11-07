@@ -1,0 +1,81 @@
+{
+  "base": "http://localhost:8081",
+  "exp": "zz_agent_20261107153235",
+  "log": [
+    {
+      "step": "7.1 open dashboard (FR-05/13/15)",
+      "status": "PASS",
+      "detail": "tabs: Running (6) Completed (12) Devices (9)"
+    },
+    {
+      "step": "7.2 expand device card (FR-08/13/19/20)",
+      "status": "PASS",
+      "detail": "expanded"
+    },
+    {
+      "step": "7.3 create experiment (FR-01)",
+      "status": "PASS",
+      "detail": "zz_agent_20261107153235"
+    },
+    {
+      "step": "7.3b duplicate name (FR-02)",
+      "status": "PASS",
+      "detail": "rejected"
+    },
+    {
+      "step": "7.3c one active per iSpindel (FR-03)",
+      "status": "PASS",
+      "detail": "running card shows End experiment, no Set up"
+    },
+    {
+      "step": "7.4 edit + measurement note/delete (FR-06)",
+      "status": "PASS",
+      "detail": "3 rows: note saved, row removed, fields updated"
+    },
+    {
+      "step": "7.5 end experiment (FR-04)",
+      "status": "PASS",
+      "detail": "ended"
+    },
+    {
+      "step": "7.6 comparison chart (FR-16/17/18)",
+      "status": "PASS",
+      "detail": "two series overlaid"
+    },
+    {
+      "step": "7.7 devices tab (FR-12)",
+      "status": "PASS",
+      "detail": "settings + delete confirm captured"
+    },
+    {
+      "step": "7.8 MQTT brokers (FR-15)",
+      "status": "PASS",
+      "detail": "added + cleaned up"
+    },
+    {
+      "step": "7.9 CSV export (FR-21)",
+      "status": "FAIL",
+      "detail": "timeout waiting for text: exported"
+    },
+    {
+      "step": "7.11 console + performance (NFR-07)",
+      "status": "PASS",
+      "detail": "load=97ms dom=97ms"
+    },
+    {
+      "step": "7.10 mobile viewport (NFR-06)",
+      "status": "PASS",
+      "detail": "390px captured"
+    }
+  ],
+  "console": [
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o"
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o"
+    }
+  ]
+}

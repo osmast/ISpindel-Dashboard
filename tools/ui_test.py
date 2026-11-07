@@ -32,6 +32,9 @@ def outputs():
             {"id": "exp-form", "property": "style"},
             {"id": "dev-form", "property": "children"},
             {"id": "dev-form", "property": "style"},
+            # FR-06: the per-measurement table
+            {"id": "exp-measurements", "property": "children"},
+            {"id": "exp-measurements", "property": "style"},
             {"id": "msg", "property": "children"},
             {"id": "modal-msg", "property": "children"},
             {"id": "reload", "property": "data"},
@@ -155,8 +158,18 @@ def card_text(device_name):
 
 
 def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID,
-         dev_name="", dev_active=None):
-    """POST one multi-output callback exactly like dash-renderer does."""
+         dev_name="", dev_active=None, meas=None):
+    """POST one multi-output callback exactly like dash-renderer does.
+
+    `meas` models the FR-06 per-measurement table of an open edit dialog: it is `None` (no table,
+    every wildcard list empty - the normal case) or a list of `(meas_id, note, clicked)` tuples;
+    exactly one of them carries `clicked` = "save" | "delete" so `ctx.triggered_id` points at it.
+    """
+    meas = meas or []
+    save_clicks = [1 if m[2] == "save" else None for m in meas]
+    del_clicks = [1 if m[2] == "delete" else None for m in meas]
+    save_ids = [{"type": "meas-save", "meas": m[0]} for m in meas]
+    del_ids = [{"type": "meas-del", "meas": m[0]} for m in meas]
     body = {
         "output": OUTPUT,
         "outputs": outputs(),
@@ -165,6 +178,9 @@ def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID
                    {"id": row_id, "property": "n_clicks", "value": clicks.get("row")},
                    # FR-12: the settings icon of a Devices-table row
                    {"id": dev_id, "property": "n_clicks", "value": clicks.get("dev")},
+                   # FR-06: the save / delete icons of the per-measurement table
+                   {"id": "meas-save", "property": "n_clicks", "value": save_clicks},
+                   {"id": "meas-del", "property": "n_clicks", "value": del_clicks},
                    {"id": "exp-cancel", "property": "n_clicks", "value": clicks.get("cancel")},
                    {"id": "exp-submit", "property": "n_clicks", "value": clicks.get("submit")}],
         # the trailing states are the rendered ids of the button patterns (the callback uses them
@@ -178,7 +194,12 @@ def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID
                            {"id": "dev-name", "property": "value", "value": dev_name},
                            {"id": "dev-active", "property": "value",
                             "value": ["on"] if dev_active is None else dev_active},
-                           {"id": dev_id, "property": "id", "value": dev_id}],
+                           {"id": dev_id, "property": "id", "value": dev_id},
+                           # FR-06: the note inputs + the id lists of the save / delete icons
+                           {"id": "meas-input", "property": "value",
+                            "value": [m[1] for m in meas]},
+                           {"id": "meas-save", "property": "id", "value": save_ids},
+                           {"id": "meas-del", "property": "id", "value": del_ids}],
         "changedPropIds": changed,
     }
     resp = main.app.server.test_client().post(
@@ -418,6 +439,47 @@ check("the edit icon opens the dialog prefilled with that experiment (FR-06)",
       resp.get("exp-modal", {}).get("title") == "Edit experiment"
       and "zz_ui_exp" in form and "US-05" in form and "from the dialog" in form,
       f"title={resp.get('exp-modal', {}).get('title')!r}")
+
+# FR-06: the edit dialog carries the per-measurement table - a note input and a delete icon per
+# row. This experiment gets two measurements so the table is non-empty.
+main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, tilt_deg, gravity_plato)
+                VALUES (%s, %s, now() - interval '2 hours', 60, 12.5),
+                       (%s, %s, now() - interval '1 hour', 61, 12.0)""",
+              (DEV, exp_id, DEV, exp_id))
+meas_id = main.query("""SELECT id FROM measurement WHERE experiment_id = %s
+                        ORDER BY recorded_at LIMIT 1""", (exp_id,))[0]["id"]
+meas_last = main.query("""SELECT id FROM measurement WHERE experiment_id = %s
+                          ORDER BY recorded_at DESC LIMIT 1""", (exp_id,))[0]["id"]
+
+status, resp = post(setup_id, end_id, changed(edit_id),
+                    {"row": [1], "cancel": 1, "submit": 2}, state(None, reload_=1), row_id=edit_id)
+meas_dump = json.dumps(resp.get("exp-measurements", {}).get("children"), default=str)
+check("the edit dialog shows the per-measurement table with note and delete actions (FR-06)",
+      status == 200 and meas_dump.count("meas-input") == 2 and meas_dump.count("meas-del") == 2
+      and resp.get("exp-measurements", {}).get("style", {}).get("display") == "block",
+      f"{meas_dump.count('meas-input')} inputs / {meas_dump.count('meas-del')} deletes")
+
+# saving a note through the callback stores it (FR-06)
+status, resp = post(setup_id, end_id, changed({"type": "meas-save", "meas": meas_id}),
+                    {"row": [1], "cancel": 1, "submit": None},
+                    state({"mode": "edit", "id": exp_id}, reload_=1),
+                    row_id=edit_id, meas=[(meas_id, "bubbling stopped", "save")])
+note = main.query("SELECT note FROM measurement WHERE id = %s", (meas_id,))[0]["note"]
+check("a measurement note is saved from the dialog (FR-06)",
+      status == 200 and note == "bubbling stopped",
+      f"note={note!r} msg={str(resp.get('msg', {}).get('children'))[:50]}")
+
+# deleting a measurement through the callback removes the row (FR-06)
+status, resp = post(setup_id, end_id, changed({"type": "meas-del", "meas": meas_last}),
+                    {"row": [1], "cancel": 1, "submit": None},
+                    state({"mode": "edit", "id": exp_id}, reload_=1),
+                    row_id=edit_id, meas=[(meas_id, "", None), (meas_last, "", "delete")])
+gone = not main.query("SELECT 1 FROM measurement WHERE id = %s", (meas_last,))
+check("a measurement is deleted from the dialog (FR-06)",
+      status == 200 and gone
+      and "removed" in str(resp.get("msg", {}).get("children")),
+      str(resp.get("msg", {}).get("children"))[:60])
+
 
 # a name that is already taken must be refused, like in the create dialog (FR-02)
 status, resp = post(setup_id, end_id, ["exp-submit.n_clicks"],
