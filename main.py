@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 import dash
+import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import psycopg
 from dash import ALL, Input, Output, State, ctx, dcc, html
@@ -32,7 +33,9 @@ CHART_DAYS = DASH["device_chart_days"]
 
 # FR-16/FR-22: the selectable time ranges (SQL interval, None = whole experiment).
 RANGES = {"all": None, "7d": "7 days", "24h": "24 hours"}
-RANGE_TEXT = {"all": "entire experiment", "7d": "last 7 days", "24h": "last 24 h"}
+# Compact radio labels (the control row); the long wording stays for the export/toast messages.
+RANGE_TEXT = {"all": "all", "7d": "7d", "24h": "24h"}
+RANGE_LONG = {"all": "entire experiment", "7d": "last 7 days", "24h": "last 24 h"}
 RANGE_FILTER = "AND (%(since)s::interval IS NULL OR m.recorded_at >= now() - %(since)s::interval)"
 
 DEV_REPEAT = 1   # only > 1 for layout tests; FR-15 wants one card per real device
@@ -221,47 +224,55 @@ def layout():
         # 20.10.2026 and taken back the same day - an empty chart shows "no measurements yet" and
         # the panel is where the FR-16/FR-18 controls live, so it should be there from the start.
         ui.card(None,
-                # FR-14/FR-17: the "upper legend" - the readout of the hovered timepoint. The
-                # values of every overlaid experiment at that moment are printed here instead of
-                # in Plotly's floating hover box, which used to cover the plot itself.
-                html.Div(id="chart-readout", className="mb-2"),
-                dcc.Graph(id="chart", config=GRAPH_CONFIG),
-                # FR-16/FR-18/FR-20: the time axis, the time range and what is drawn sit under
-                # the figure (NFR-06).
-                html.Div(className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start "
-                                   "sm:justify-between sm:gap-4", children=[
-                    ui.field("Show",
-                             dcc.RadioItems(id="chart-series", value="both",
-                                            options=[{"label": " gravity + temperature",
-                                                      "value": "both"},
-                                                     {"label": " gravity only", "value": "gravity"},
-                                                     {"label": " temperature only",
-                                                      "value": "temperature"}],
-                                            className="flex flex-wrap gap-3 text-sm",
-                                            labelClassName="flex min-h-11 cursor-pointer "
-                                                           "items-center")),
-                    ui.field("Time axis",
-                             dcc.RadioItems(id="relative", value="abs",
-                                            options=[{"label": " absolute", "value": "abs"},
-                                                     {"label": " hours since start", "value": "rel"}],
-                                            className="flex flex-wrap gap-3 text-sm",
-                                            labelClassName="flex min-h-11 cursor-pointer "
-                                                           "items-center")),
-                ]),
-                # FR-22: export every experiment overlaid in the chart (FR-17) as one CSV over
-                # the selected time range. The single-row export stays on the FR-21 `csv` icon.
-                html.Div(className="mt-3 flex justify-start", children=[
-                    ui.button("export-selected", "Export selected (CSV)",
-                              tone="grey", compact=True),
-                ]),
-                html.Div(className="mt-3 flex justify-start sm:justify-end", children=[
-                    ui.field("Time range",
-                             dcc.RadioItems(id="range", value="all",
-                                            options=[{"label": f" {label}", "value": key}
-                                                     for key, label in RANGE_TEXT.items()],
-                                            className="flex flex-wrap gap-3 text-sm sm:justify-end",
-                                            labelClassName="flex min-h-11 cursor-pointer "
-                                                           "items-center")),
+                # FR-14/FR-17: the hover readout is Plotly's built-in tooltip (see
+                # `charts.fermentation_figure`), so the card holds the figure directly.
+                # `width: 100%` plus assets/plot_resize.js: the figure follows the card width on a
+                # phone and after a tab / modal / breakpoint change, not only on a window resize.
+                dcc.Graph(id="chart", config=GRAPH_CONFIG, style={"width": "100%"}),
+                # FR-16/FR-18/FR-20: three responsive breakpoints for the **bare** option groups
+                # (no captions above them), and a group wraps whole:
+                #   base / phone : 1 column  - all three groups stacked, left-aligned
+                #   md           : 2 columns - units | axis, then the range group on its own row
+                #   xl           : 3 columns - left / centred / right
+                # The RadioItems themselves never wrap (no `flex-wrap`), so "24h" stays with its
+                # group instead of breaking onto a second line.
+                html.Div(className="mt-5 grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-3",
+                         children=[
+                    ui.field(
+                        None,
+                        # two independent toggles instead of three radio states: both checked =
+                        # gravity + temperature; one checked = that series only
+                        dcc.Checklist(id="chart-series", value=["gravity", "temperature"],
+                                      options=[{"label": "°P", "value": "gravity"},
+                                               {"label": "°C", "value": "temperature"}],
+                                      className="flex gap-4 text-sm",
+                                      labelClassName="flex min-h-11 cursor-pointer "
+                                                     "items-center gap-2"),
+                        className="xl:justify-self-start"),
+                    ui.field(
+                        None,
+                        dcc.RadioItems(id="relative", value="abs",
+                                       options=[{"label": "absolute", "value": "abs"},
+                                                {"label": "hours since start", "value": "rel"}],
+                                       className="flex gap-4 text-sm md:justify-center",
+                                       labelClassName="flex min-h-11 cursor-pointer "
+                                                      "items-center gap-2"),
+                        className="md:justify-self-center md:text-center"),
+                    # the range options and the compact CSV export share the right-hand group
+                    html.Div(
+                        className="flex items-center gap-3 md:col-span-2 "
+                                  "md:justify-self-end xl:col-span-1",
+                        children=[
+                            dcc.RadioItems(id="range", value="all",
+                                           options=[{"label": label, "value": key}
+                                                    for key, label in RANGE_TEXT.items()],
+                                           className="flex gap-4 text-sm md:justify-end",
+                                           labelClassName="flex min-h-11 cursor-pointer "
+                                                          "items-center gap-2"),
+                            html.Button(
+                                "csv", id="export-selected", className="csv-export",
+                                title="export every experiment shown in the chart as CSV"),
+                        ]),
                 ])),
         # FR-21: the download target of the FR-05 row export (an invisible component).
         dcc.Download(id="download"),
@@ -273,7 +284,9 @@ def layout():
         # on every refresh; `exp-target` holds the device whose dialog is open (None = closed).
         dcc.Store(id="exp-target", data=None),
         dmc.Modal(
-            id="exp-modal", title="Set up experiment", opened=False, centered=True, size="lg",
+            # `xl`: the edit dialog carries the AG Grid with the time / numeric / note / action
+            # columns - a `lg` modal was too narrow to reach the note and delete columns
+            id="exp-modal", title="Set up experiment", opened=False, centered=True, size="xl",
             # Closed through the buttons only - a self-closing modal leaves Dash's `opened` at True.
             withCloseButton=False, closeOnClickOutside=False, closeOnEscape=False,
             children=[
@@ -326,10 +339,15 @@ def layout():
         dcc.Store(id="device_times", data={}),
         # {"mobile": bool}, written by the viewport callback, used to drop the legend (NFR-06)
         dcc.Store(id="viewport", data={}),
-        # which accordion cards are open - written by assets/card_state.js, read back on rebuild
-        dcc.Store(id="open_cards", data={}),
-        # FR-17: the experiment ids overlaid in the comparison chart (written by toggle_chart)
+        # FR-17: the experiment ids overlaid in the comparison chart. Single writer: the
+        # `toggle_chart` clientside callback - it merges `preselect-ids` on load and toggles on click.
         dcc.Store(id="chart-select", data=[]),
+        # the running experiments, written **once** by `preselect_active`; the toggle callback
+        # merges them into `chart-select` on first load
+        dcc.Store(id="preselect-ids", data=[]),
+        # True once `preselect_active` has run - the later 15 s ticks must not re-add what the user
+        # removed from the chart
+        dcc.Store(id="chart-preselected", data=False),
         dcc.Store(id="reload", data=0),
     ])
 
@@ -352,6 +370,11 @@ app.clientside_callback(
     function (n, times, ids) {
         // with a single device card the id list can arrive as a scalar (DEV_REPEAT = 1)
         const list = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+        // the store is written by the 15 s `tick`: on the very first 1 s tick it can still be
+        // empty - keep the server-rendered text instead of flashing "last: -"
+        if (!times || Object.keys(times).length === 0) {
+            return window.dash_clientside.no_update;
+        }
         const now = Date.now() / 1000;
         function span(sec) {              // 42 -> "42 s", 155 -> "2:35"
             return sec > 60 ? Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0")
@@ -452,18 +475,21 @@ def broker_host():
               Output("exp-tab-running", "children"), Output("exp-tab-completed", "children"),
               Output("exp-tab-devices", "children"),
               Input("tick", "n_intervals"), Input("reload", "data"),
-              Input("viewport", "data"), Input("chart-select", "data"),
-              State("open_cards", "data"))
-def update_dashboard(_, __, viewport, selected, open_cards):
+              Input("viewport", "data"),
+              # `chart-select` is **State**, not Input: toggling an experiment in the chart (FR-17)
+              # must not rebuild the whole page tree. The row icon is recoloured by the clientside
+              # `toggle_chart` callback below; this State only keeps the colour correct across the
+              # 15 s refresh, which re-renders the tables.
+              State("chart-select", "data"))
+def update_dashboard(_, __, viewport, selected):
     """The device cards, the three experiment-panel views (FR-05 running / completed + FR-12)
-    and the tab labels with their counts. `chart-select` is an Input too, so toggling an
-    experiment in the chart (FR-17) re-renders the table and the row icon turns blue at once."""
+    and the tab labels with their counts."""
     rows = experiment_rows()
     running = [r for r in rows if r["is_active"]]
     completed = [r for r in rows if not r["is_active"]]
     devices = device_rows()
     host = broker_host()
-    return (ispindel_overview(open_cards or {}, (viewport or {}).get("mobile", False), host),
+    return (ispindel_overview({}, (viewport or {}).get("mobile", False), host),
             device_table(devices, host),
             experiment_table(running, selected, empty="no experiment is running"),
             experiment_table(completed, selected, empty="no experiment has been completed yet"),
@@ -471,11 +497,15 @@ def update_dashboard(_, __, viewport, selected, open_cards):
             f"Devices ({len(devices)})")
 
 
-@app.callback(Output("device_times", "data"), Input("tick1s", "n_intervals"))
+@app.callback(Output("device_times", "data"), Input("tick", "n_intervals"))
 def update_device_times(_):
-    """Last measurement and next transmission per device, as absolute epochs - a tiny query that
-    can run every `dashboard.live_ms`. The browser turns them into relative text. Keyed by the
-    device id (FR-15: the iSpindel name is not unique across brokers)."""
+    """Last measurement and next transmission per device, as absolute epochs. Keyed by the
+    device id (FR-15: the iSpindel name is not unique across brokers).
+
+    Deliberately on `tick` (15 s), **not** `tick1s`: the store only needs the two absolute epochs,
+    and the 1 s clientside callback recomputes "12 s ago" / "in 12 s" from them in the browser.
+    This used to query `v_device_latest` once per second per open dashboard - a needless database
+    round trip that multiplied with every extra tab."""
     times = {}
     for row in query("SELECT device_id, recorded_at, interval_s FROM v_device_latest"):
         last, interval = row["recorded_at"], row["interval_s"]
@@ -487,6 +517,22 @@ def update_device_times(_):
             "due": (last + timedelta(seconds=interval)).timestamp() if interval else None,
         }
     return times
+
+
+# FR-17: the comparison chart opens with the experiments that are **running now** already overlaid.
+# This is a one-shot server callback (the ids come from the database); it writes `preselect-ids`, not
+# `chart-select`, so that store keeps a single writer (the clientside toggle). `chart-preselected`
+# keeps the later 15 s ticks from re-adding an experiment the user removed.
+@app.callback(Output("preselect-ids", "data"),
+              Output("chart-preselected", "data"),
+              Input("tick", "n_intervals"),
+              State("chart-preselected", "data"))
+def preselect_active(_, done):
+    if done:
+        return dash.no_update, dash.no_update
+    ids = [row["id"] for row in
+           query("SELECT id FROM experiment WHERE ended_at IS NULL ORDER BY id")]
+    return ids, True
 
 
 def mqtt_hint(host=""):
@@ -522,8 +568,9 @@ def mqtt_hint(host=""):
 
 
 def ispindel_overview(open_cards=None, mobile=False, host=""):
-    """One batch card per iSpindel. `open_cards` keeps the open state across a rebuild;
-    `mobile` comes from the `viewport` store (NFR-06); `host` fills the empty-state hint."""
+    """One batch card per iSpindel. `mobile` comes from the `viewport` store (NFR-06); `host`
+    fills the empty-state hint. `open_cards` is kept for the existing callers/tests but is no
+    longer read - the open state is owned by assets/card_state.js (pure clientside)."""
     open_cards = open_cards or {}
     rows = query("""SELECT l.device_id, l.mqtt_name, l.recorded_at, l.tilt_deg, l.temp_c,
                            l.gravity_plato, l.battery_v, l.interval_s, l.rssi_dbm, l.broker_label
@@ -549,9 +596,9 @@ def ispindel_overview(open_cards=None, mobile=False, host=""):
                                 FROM experiment WHERE ended_at IS NULL""")}
     if DEV_REPEAT > 1:                       # development only, see DEV_REPEAT
         rows = rows[:1] * DEV_REPEAT
-    # `slot` only exists so the repeated cards get unique ids
+    # `slot` only exists so the repeated cards get unique ids. The open state is not server-side:
+    # assets/card_state.js restores it after a rebuild, so the details element stays uncontrolled.
     cards = [device_card(row, by_device.get(row["device_id"], []), slot,
-                         open_cards.get(f"{row['device_id']}#{slot}", False),
                          active.get(row["device_id"]), mobile)
              for slot, row in enumerate(rows)]
     # 12 columns: one card per row on a phone, two from md, three only from xxl (1536px)
@@ -595,7 +642,8 @@ def times_text(last, due):
 def plot(figure, className=""):
     """A `dcc.Graph` that fills a wrapper div sized by a Tailwind height class."""
     return html.Div(className=className, children=[
-        dcc.Graph(figure=figure, style={"height": "100%"}, config=GRAPH_CONFIG)
+        dcc.Graph(figure=figure, style={"height": "100%", "width": "100%"},
+                  config=GRAPH_CONFIG)
     ])
 
 
@@ -720,7 +768,7 @@ def status_chip(running, warn):
     )
 
 
-def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False):
+def device_card(latest, points, slot=0, batch=None, mobile=False):
     """One iSpindel as a collapsible batch card (FR-13, FR-20). Collapsed: batch name, status
     chip, current gravity / temperature / battery. Opened: the three data zones, the device's own
     fermentation chart and the experiment controls. `batch` is the running experiment or None;
@@ -764,9 +812,9 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
     target_span = target_temp_range(style) if running else None
     hint = temp_hint(temp, target_span)
     return html.Details(
-        # `id` gives React a stable key so a remount keeps `open` (restored from `open_cards`)
+        # the `open` attribute is **not** controlled by Dash: assets/card_state.js owns it and
+        # restores it after a rebuild, so expanding a card never waits for a React update.
         id={"type": "card", "device": device_id, "slot": slot},
-        open=is_open,
         **{"data-card": f"{device_id}#{slot}"},
         # `group` is needed by the `group-open:` variants inside; a running experiment gets the
         # thicker outline plus a ring (FR-04).
@@ -775,11 +823,9 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                    "group rounded-xl corner-squircle border border-brand bg-white transition-colors"),
         children=[
             html.Summary(
-                # NFR-06: **one row at every width.** What makes it fit is the responsive type (the
-                # smaller size on a phone, the desktop size from `sm`) plus the battery - the least
-                # urgent number - which only appears from `lg`. The name shrinks and truncates last,
-                # and the numbers keep their size, so the row stays readable on a 360 px phone: name,
-                # gravity and temperature there, battery added on a wide screen.
+                # NFR-06: on a phone the collapsed row shows **only the name and the status dot**
+                # (the values are in the opened zones); gravity/temperature join from `sm`, the
+                # battery - the least urgent number - from `lg`. The name shrinks and truncates last.
                 className="flex cursor-pointer list-none items-center justify-between gap-3 "
                           "p-3 [&::-webkit-details-marker]:hidden sm:p-4",
                 children=[
@@ -794,11 +840,13 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                         ]),
                     ]),
                     html.Div(className="flex shrink-0 items-center gap-3 sm:gap-4", children=[
-                        # gravity/temperature hide once open (the zones show them then)
+                        # phone: hidden entirely - the summary keeps the name and the status dot.
+                        # from `sm`: shown, and hidden again once the card is open (the zones show
+                        # the same numbers then).
                         header_stat(f"{ui.num(gravity, 1)} °P",
-                                    className="text-yellow-600 group-open:hidden"),
+                                    className="hidden text-yellow-600 group-open:hidden sm:block"),
                         header_stat(f"{ui.num(temp, 1)} °C",
-                                    className="text-purple-700 group-open:hidden"),
+                                    className="hidden text-purple-700 group-open:hidden sm:block"),
                         # FR-19: the battery % - only where there is room for it
                         header_stat(f"{pct:.0f} %",
                                     className=("hidden text-amber-600 lg:block" if low else
@@ -880,7 +928,7 @@ def device_card(latest, points, slot=0, is_open=False, batch=None, mobile=False)
                     ), span={"base": 12, "sm": 4}),
                 ]),
                 plot(charts.fermentation_figure(series, height=None, legend=False,
-                                                mobile=mobile, hover_overlay=True),
+                                                mobile=mobile),
                      className="h-60 sm:h-52"),
                 # FR-01 - FR-04: the experiment controls (end / set up) of this iSpindel
                 html.Div(className="mt-3 flex flex-wrap items-center justify-between gap-2",
@@ -974,7 +1022,28 @@ def experiment_table(rows, selected=(), empty="no data yet"):
 # FR-06: the measurements of one experiment, editable inside the experiment dialog. Each row can
 # carry a note of its own and can be removed; removing the newest row shortens the experiment
 # (its end time follows the last remaining measurement).
-MEAS_HEADERS = ["Time (local)", "Tilt °", "Temp °C", "Gravity °P", "Battery V", "Note", ""]
+# FR-06: the measurement list is an AG Grid, not a table of Dash inputs. A fermentation easily has
+# hundreds of rows; rendering one `dcc.Input` + two ActionIcons per row made the edit dialog slow to
+# open. AG Grid virtualises the rows (only the visible ones reach the DOM), edits the note in place
+# and needs one component instead of 3 x N.
+MEAS_COLUMNS = [
+    {"field": "time", "headerName": "Time (local)", "editable": False, "width": 150},
+    {"field": "tilt", "headerName": "Tilt °", "editable": False, "width": 70},
+    {"field": "temp", "headerName": "Temp °C", "editable": False, "width": 85},
+    {"field": "gravity", "headerName": "Gravity °P", "editable": False, "width": 100},
+    {"field": "battery", "headerName": "Battery V", "editable": False, "width": 90},
+    # the note is the one editable column: single click opens the text editor and the
+    # `cellValueChanged` event stores it (`meas_grid_event`). The editor is named explicitly so
+    # the column stays editable regardless of the string-column default.
+    {"field": "note", "headerName": "Note", "editable": True, "minWidth": 150, "flex": 1,
+     "cellEditor": "agTextCellEditor"},
+    # the ✕ is drawn by assets/aggrid.js (`window.dashAgGridComponentFunctions`); the cell itself
+    # stays a normal AG Grid cell, so `cellClicked` still reports colId="actions"
+    {"field": "actions", "headerName": "", "editable": False, "width": 60,
+     "sortable": False, "resizable": False,
+     "cellRenderer": "measDeleteRenderer",
+     "cellStyle": {"display": "flex", "alignItems": "center", "justifyContent": "center"}},
+]
 
 
 def measurement_rows(exp_id):
@@ -989,53 +1058,48 @@ def measurement_rows(exp_id):
                     ORDER BY recorded_at""", (exp_id,))
 
 
-def measurement_form(exp_id):
-    """FR-06: the per-measurement table of the edited experiment (notes + a delete icon).
+def measurement_grid_rows(exp_id):
+    """The AG Grid `rowData` of one experiment - plain JSON, formatted for display."""
+    return [{"id": r["id"],
+             "time": f"{local(r['recorded_at']):%d. %b %y %H:%M:%S}",
+             "tilt": r["tilt_deg"], "temp": r["temp_c"],
+             "gravity": r["gravity_plato"], "battery": r["battery_v"],
+             "note": r["note"] or "", "actions": "delete"}
+            for r in measurement_rows(exp_id)]
 
-    Every note is an `Input` (`meas-input`) whose value the callback reads as State; a save icon
-    (`meas-save`) writes it and a trash icon (`meas-del`) removes the row. The ids are pattern ids
-    that must match `experiment_action` exactly.
+
+def measurement_form(exp_id):
+    """FR-06: the per-measurement grid of the edited experiment.
+
+    The note is edited **in place** and saved on `cellValueChanged`; the ✕ in the `actions` column
+    arrives as `cellClicked` (see `meas_grid_event`). Both use a pattern id, because the component
+    lives in the dialog content that exists only after `experiment_action` opens it - a literal id
+    would fail Dash's startup validation.
     """
-    rows = measurement_rows(exp_id)
+    rows = measurement_grid_rows(exp_id)
+    title = html.H3("Measurements",
+                    className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500")
     if not rows:
         return html.Div(children=[
-            html.H3("Measurements", className="mb-2 text-xs font-semibold uppercase tracking-wider "
-                                              "text-slate-500"),
+            title,
             html.P("this experiment has no measurements yet", className="text-sm text-slate-400"),
         ])
-    body = []
-    for r in rows:
-        def icon(kind, icon_name, label, colour):
-            return dmc.Tooltip(
-                label=label, position="top", withArrow=True, openDelay=300,
-                children=dmc.ActionIcon(
-                    DashIconify(icon=icon_name, width=15),
-                    id={"type": kind, "meas": r["id"]},
-                    variant="subtle", color=colour, size="sm", radius="md",
-                    **{"aria-label": label}))
-
-        body.append([
-            f"{local(r['recorded_at']):%d. %b %y %H:%M:%S}",
-            ui.num(r["tilt_deg"], 1),
-            ui.num(r["temp_c"], 2),
-            ui.num(r["gravity_plato"], 2),
-            ui.num(r["battery_v"], 3),
-            dcc.Input(id={"type": "meas-input", "meas": r["id"]}, value=r["note"] or "",
-                      placeholder="note ...", persistence=False,
-                      className="w-full min-w-[8rem] rounded-md corner-squircle border "
-                                "border-slate-300 px-2 py-1 text-sm"),
-            html.Div(className="flex items-center gap-1", children=[
-                icon("meas-save", "tabler:device-floppy", "save the note", "gray"),
-                icon("meas-del", "tabler:trash", "delete this measurement", "red"),
-            ]),
-        ])
     return html.Div(children=[
-        html.H3("Measurements", className="mb-2 text-xs font-semibold uppercase tracking-wider "
-                                          "text-slate-500"),
-        html.P("edit a note and save it, or delete a row. Deleting the newest measurement moves "
-               "the end time of a completed experiment to the last remaining one (FR-06).",
+        title,
+        html.P("edit a note in place - it is saved when you leave the cell - or click the ✕ of a "
+               "row. Deleting the newest measurement moves the end time of a completed experiment "
+               "to the last remaining one (FR-06).",
                className="mb-2 text-xs text-slate-400"),
-        ui.table(MEAS_HEADERS, body),
+        dag.AgGrid(
+            id={"type": "meas-grid", "exp": exp_id},
+            rowData=rows,
+            columnDefs=MEAS_COLUMNS,
+            defaultColDef={"sortable": True, "resizable": True, "filter": False},
+            dashGridOptions={"singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
+                             "animateRows": True},
+            className="ag-theme-quartz",
+            style={"height": "min(60vh, 520px)", "width": "100%"},
+        ),
     ])
 
 
@@ -1079,6 +1143,57 @@ def delete_measurement(meas_id):
 
 
 
+
+
+def _grid_event(values):
+    """The first AG Grid event object out of a pattern-matching callback value.
+
+    With one grid the value is `[event]` (or `[[event]]` when the prop itself is a list), so this
+    flattens the wrapper Dash puts around each pattern component.
+    """
+    if isinstance(values, dict):
+        return values
+    if isinstance(values, (list, tuple)):
+        for item in values:
+            if isinstance(item, dict):
+                return item
+            if isinstance(item, (list, tuple)):
+                for inner in item:
+                    if isinstance(inner, dict):
+                        return inner
+    return None
+
+
+# FR-06: AG Grid events of the measurement floor. `cellValueChanged` saves the note that was just
+# edited, `cellClicked` handles the ✕ of the `actions` column. Only the grid's own `rowData` is
+# written back (no toast / `reload` duplicate): the next 15 s dashboard tick refreshes the counts,
+# and keeping this callback to one output means it cannot collide with `experiment_action`.
+@app.callback(Output({"type": "meas-grid", "exp": ALL}, "rowData"),
+              Input({"type": "meas-grid", "exp": ALL}, "cellValueChanged"),
+              Input({"type": "meas-grid", "exp": ALL}, "cellClicked"),
+              State({"type": "meas-grid", "exp": ALL}, "id"),
+              prevent_initial_call=True)
+def meas_grid_event(changed, clicked, ids):
+    id_list = click_values(ids)
+    skip = [dash.no_update for _ in id_list]
+    triggered = ctx.triggered_id
+    if not (isinstance(triggered, dict) and triggered.get("type") == "meas-grid"):
+        return skip
+    prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1]
+    exp_id = triggered.get("exp")
+    event = _grid_event(changed if prop == "cellValueChanged" else clicked)
+    if event is None or not isinstance(event.get("data"), dict):
+        return skip
+    if prop == "cellValueChanged":
+        if event.get("colId") == "note":
+            save_measurement_note(event["data"].get("id"), event.get("newValue"))
+        return skip
+    if event.get("colId") != "actions":
+        return skip
+    delete_measurement(event["data"].get("id"))
+    fresh = measurement_grid_rows(exp_id)
+    return [fresh if isinstance(item, dict) and item.get("exp") == exp_id else dash.no_update
+            for item in id_list]
 
 
 # FR-12: the device master data. A new iSpindel appears automatically (created by the ingest).
@@ -1413,24 +1528,83 @@ def toggle_broker(broker_id):
 
 
 
-@app.callback(Output("chart-select", "data"),
-              Input({"type": "row-btn", "exp": ALL, "mode": ALL}, "n_clicks"),
-              State({"type": "row-btn", "exp": ALL, "mode": ALL}, "id"),
-              State("chart-select", "data"),
-              prevent_initial_call=True)
-def toggle_chart(clicks, ids, selected):
-    """FR-17: the `chart` row action adds / removes the experiment from the comparison chart."""
-    triggered = ctx.triggered_id
-    if not (isinstance(triggered, dict) and triggered.get("type") == "row-btn"
-            and triggered.get("mode") == "chart" and clicked(triggered, ids, clicks)):
-        return dash.no_update
-    selected = list(selected or [])
-    exp_id = triggered.get("exp")
-    if exp_id in selected:
-        selected.remove(exp_id)
-    else:
-        selected.append(exp_id)
-    return selected
+# FR-17: toggling an experiment in the chart is pure client state. Keeping it in the browser
+# removes a server round trip per click **and** stops the click from rebuilding the whole page
+# tree (update_dashboard reads `chart-select` as State only). The same callback **merges** the
+# one-shot `preselect-ids` on load, so it is the only writer of `chart-select`.
+app.clientside_callback(
+    """
+    function (clicks, preseed, ids, selected) {
+        const ctx = dash_clientside.callback_context;
+        const propId = (ctx && ctx.triggered && ctx.triggered[0] &&
+                        ctx.triggered[0].prop_id) || "";
+        let chosen = Array.isArray(selected) ? selected.slice() : [];
+
+        // first load: add the running experiments that `preselect_active` found
+        if (propId.indexOf("preselect-ids") === 0) {
+            const fresh = Array.isArray(preseed) ? preseed : [];
+            fresh.forEach(function (id) {
+                if (chosen.indexOf(id) === -1) { chosen.push(id); }
+            });
+            return chosen;
+        }
+
+        // `triggered_id` is not exposed by every Dash 3 build, so read the prop id instead:
+        // pattern ids arrive as a JSON object in front of the ".n_clicks" suffix.
+        let triggered = (ctx && ctx.triggered_id) || null;
+        if (!triggered) {
+            const idText = propId.substring(0, propId.lastIndexOf("."));
+            try { triggered = JSON.parse(idText); }
+            catch (e) {
+                try { triggered = JSON.parse(idText.replace(/'/g, '"')); }
+                catch (e2) { triggered = null; }
+            }
+        }
+        const list = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+        const values = Array.isArray(clicks) ? clicks : (clicks ? [clicks] : []);
+        // a rebuilt table also fires this callback with n_clicks = 0 - only a real click toggles
+        if (!triggered || triggered.type !== "row-btn" || triggered.mode !== "chart") {
+            return window.dash_clientside.no_update;
+        }
+        let index = -1;
+        for (let i = 0; i < list.length; i++) {
+            if (list[i] && list[i].exp === triggered.exp) { index = i; break; }
+        }
+        if (index < 0 || !values[index]) {
+            return window.dash_clientside.no_update;
+        }
+        const at = chosen.indexOf(triggered.exp);
+        if (at >= 0) { chosen.splice(at, 1); } else { chosen.push(triggered.exp); }
+        return chosen;
+    }
+    """,
+    Output("chart-select", "data"),
+    Input({"type": "row-btn", "exp": ALL, "mode": "chart"}, "n_clicks"),
+    Input("preselect-ids", "data"),
+    State({"type": "row-btn", "exp": ALL, "mode": "chart"}, "id"),
+    State("chart-select", "data"),
+    prevent_initial_call=True,
+)
+
+# The row icons follow `chart-select` whoever writes it - a click above, or the initial
+# `preselect_active`. The 15 s table rebuild changes the id list, so this also repaints the icons
+# right after a rebuild instead of waiting for the next click.
+app.clientside_callback(
+    """
+    function (selected, ids) {
+        const list = Array.isArray(ids) ? ids : (ids ? [ids] : []);
+        const chosen = Array.isArray(selected) ? selected : [];
+        const on = {};
+        chosen.forEach(function (id) { on[id] = true; });
+        return list.map(function (id) {
+            return on[id.exp] ? "blue" : "gray";
+        });
+    }
+    """,
+    Output({"type": "row-btn", "exp": ALL, "mode": "chart"}, "color"),
+    Input("chart-select", "data"),
+    State({"type": "row-btn", "exp": ALL, "mode": "chart"}, "id"),
+)
 
 
 def click_values(value):
@@ -1502,7 +1676,13 @@ def create_experiment(name, device_id, start, beer_style, og, yeast, responsible
 
 
 def end_experiment(device):
-    """FR-04: end the active experiment on a device (id or iSpindel name). Returns (alert, delta)."""
+    """FR-04: end the active experiment on a device (id or iSpindel name). Returns (alert, delta).
+
+    The stored end time is the **last measurement** of the experiment, not the moment the
+    user pressed the button: a fermentation is over when the iSpindel stopped reporting, and
+    the UI click can be hours or days later. With no measurement at all, `now()` is the only
+    honest fallback. `GREATEST(..., started_at + 1 s)` keeps the schema CHECK satisfied.
+    """
     device_id = resolve_device(device)
     if not device_id:
         return ui.alert("unknown iSpindel", "amber"), 0
@@ -1510,7 +1690,12 @@ def end_experiment(device):
                    WHERE device_id = %s AND ended_at IS NULL LIMIT 1""", (device_id,))
     if not row:
         return ui.alert("this iSpindel has no running experiment", "amber"), 0
-    execute("UPDATE experiment SET ended_at = now() WHERE id = %s", (row[0]["id"],))
+    execute("""UPDATE experiment e
+               SET ended_at = GREATEST(
+                   COALESCE((SELECT max(m.recorded_at) FROM measurement m
+                             WHERE m.experiment_id = e.id), now()),
+                   e.started_at + interval '1 second')
+               WHERE e.id = %s""", (row[0]["id"],))
     return ui.alert(f"experiment '{row[0]['name']}' ended - new measurements are no longer "
                     f"assigned to it (FR-04)", "green"), 1
 
@@ -1626,9 +1811,6 @@ def delete_experiment(exp_id):
               Input({"type": "row-btn", "exp": ALL, "mode": ALL}, "n_clicks"),
               # FR-12: the settings / delete icons of a row in the Devices table
               Input({"type": "dev-btn", "device": ALL, "mode": ALL}, "n_clicks"),
-              # FR-06: the save / delete icons of the per-measurement table
-              Input({"type": "meas-save", "meas": ALL}, "n_clicks"),
-              Input({"type": "meas-del", "meas": ALL}, "n_clicks"),
               Input("exp-cancel", "n_clicks"), Input("exp-submit", "n_clicks"),
               State("exp-target", "data"),
               State("new-name", "value"), State("new-start", "value"), State("new-style", "value"),
@@ -1643,16 +1825,11 @@ def delete_experiment(exp_id):
               # FR-12: the fields of the device dialog (the same modal, a different form)
               State("dev-name", "value"), State("dev-active", "value"),
               State({"type": "dev-btn", "device": ALL, "mode": ALL}, "id"),
-              # FR-06: the note inputs and the id lists of the measurement save / delete icons
-              State({"type": "meas-input", "meas": ALL}, "value"),
-              State({"type": "meas-save", "meas": ALL}, "id"),
-              State({"type": "meas-del", "meas": ALL}, "id"),
               prevent_initial_call=True)
-def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, save_clicks, del_clicks,
+def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks,
                       _, __, target, name, start,
                       style, og, yeast, responsible, notes, reload_data, setup_ids, end_ids,
-                      row_ids, range_key, dev_name, dev_active, dev_ids,
-                      meas_values, meas_save_ids, meas_del_ids):
+                      row_ids, range_key, dev_name, dev_active, dev_ids):
     """One callback for everything that writes `exp-modal.opened` (Dash allows one callback per
     output): open the dialog, create, edit, delete, cancel, end, plus the csv row action (FR-21;
     the chart action is swallowed here and handled by `toggle_chart`, FR-17). `exp-target` holds
@@ -1773,26 +1950,6 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks, save_cli
         return opened({"mode": "edit", "id": triggered.get("exp")},
                       "Edit experiment", "Save changes", experiment_form(values),
                       measurements=measurement_form(triggered.get("exp")))
-    if isinstance(triggered, dict) and triggered.get("type") in ("meas-save", "meas-del"):
-        # FR-06: the icons of the per-measurement table (guarded like the rest - a rebuild mounts
-        # them with n_clicks = 0). The note input of a row keeps the user's typing; only a save
-        # writes it, so a delete never discards a neighbour's edit silently.
-        if triggered.get("type") == "meas-del":
-            if not clicked(triggered, meas_del_ids, del_clicks):
-                return nothing()
-            alert, delta = delete_measurement(triggered.get("meas"))
-        else:
-            if not clicked(triggered, meas_save_ids, save_clicks):
-                return nothing()
-            values = dict(zip([m.get("meas") for m in click_values(meas_save_ids)],
-                              click_values(meas_values)))
-            alert, delta = save_measurement_note(triggered.get("meas"),
-                                                 values.get(triggered.get("meas")))
-        # re-render the table of the experiment this row belongs to (exp-target holds its id)
-        fresh = measurement_form(target.get("id")) if target.get("mode") == "edit" else []
-        return shape(meas_form=fresh,
-                     meas_style=shown if target.get("mode") == "edit" else hidden,
-                     message=ui.toast(alert), reload_value=reload_data + delta)
     if isinstance(triggered, dict) and triggered.get("type") == "dev-btn":
         # FR-12: the icons of a Devices-table row (guarded by `clicked()` like the rest)
         if not clicked(triggered, dev_ids, dev_clicks):
@@ -1951,15 +2108,34 @@ def chart_window(range_key):
     return row["start_ts"], row["end_ts"]
 
 
+def series_choice(value):
+    """The `chart-series` checklist -> the `series_pick` the figure understands.
+
+    The control is two checkboxes now; `[]` means "draw neither" (`"none"`). A plain string is
+    still accepted because `tools/check_requirements.py` calls `update_chart` directly.
+    """
+    if isinstance(value, str):
+        return value or "both"
+    chosen = set(value or [])
+    if chosen == {"gravity", "temperature"}:
+        return "both"
+    if chosen == {"gravity"}:
+        return "gravity"
+    if chosen == {"temperature"}:
+        return "temperature"
+    return "none"
+
+
 @app.callback(Output("chart", "figure"),
               Input("tick", "n_intervals"), Input("chart-select", "data"),
               Input("relative", "value"), Input("range", "value"), Input("viewport", "data"),
               Input("chart-series", "value"))
-def update_chart(_, ids, axis, range_key, viewport, series_pick):
+def update_chart(_, ids, axis, range_key, viewport, series):
     # FR-17: `ids` are the experiments toggled on in the FR-05 table (`chart-select`).
     mobile = (viewport or {}).get("mobile", False)   # FR-14/NFR-06: drop legend/titles on a phone
+    series_pick = series_choice(series)
     if not ids:
-        return charts.fermentation_figure([], mobile=mobile, series_pick=series_pick or "both")
+        return charts.fermentation_figure([], mobile=mobile, series_pick=series_pick)
     rows = query("""SELECT e.id, e.name, m.recorded_at,
                            m.gravity_plato::float8 AS gravity_plato,
                            m.temp_c::float8 AS temp_c
@@ -1980,52 +2156,7 @@ def update_chart(_, ids, axis, range_key, viewport, series_pick):
     # FR-16: `chart_window` pins the x axis to the whole range (FR-18 uses hours since start)
     return charts.fermentation_figure(series, relative=(axis == "rel"), mobile=mobile,
                                       x_range=chart_window(range_key),
-                                      series_pick=series_pick or "both")
-
-
-@app.callback(Output("chart-readout", "children"),
-              Input("chart", "hoverData"), Input("relative", "value"))
-def update_readout(hover, axis):
-    """FR-14/FR-17: the "upper legend" - the values of every series at the hovered timepoint.
-
-    Plotly's floating unified hover box is turned off in `charts.fermentation_figure`
-    (`hover_overlay=False`), because it covered the plot. Instead the hovered values are printed
-    here, above the figure, where the legend already sits - so hovering never hides the curve.
-    `customdata` of every point carries [value, unit, label]; with the unified hover every trace at
-    that x arrives in one payload. The time is rendered in local time (NFR-09).
-    """
-    if not hover or not hover.get("points"):
-        return html.Div("hover the chart to read every series at one timepoint",
-                        className="text-xs text-slate-400")
-    points = hover["points"]
-    stamp = points[0].get("x")
-    if axis == "rel" and isinstance(stamp, (int, float)):
-        when = f"{stamp:.2f} h since start"
-    elif hasattr(stamp, "strftime"):
-        when = f"{local(stamp):%d.%m. %H:%M}"
-    else:
-        when = str(stamp)
-    chips = []
-    for p in points:
-        custom = p.get("customdata")
-        value, unit, label = (custom + [None])[:3] if isinstance(custom, list) else (None, None, None)
-        text = ui.num(value, 1)
-        chips.append(html.Span(className="inline-flex items-baseline gap-1 rounded-md "
-                                         "corner-squircle border border-slate-200 bg-slate-50 "
-                                         "px-2 py-0.5", children=[
-            # the marker colour is the trace colour, so a chip matches its curve (FR-15)
-            html.Span(className="inline-block h-2 w-2 rounded-full",
-                      style={"background": p.get("marker.color")
-                             or (p.get("line") or {}).get("color") or p.get("color")
-                             or "#0f172a"}),
-            html.Span(f"{label}: ", className="text-xs text-slate-500"),
-            html.Span(f"{text}{unit or ''}", className="text-xs font-semibold tabular-nums "
-                                                       "text-slate-800"),
-        ]))
-    return html.Div(className="flex flex-wrap items-center gap-2", children=[
-        html.Span(f"{when} ·", className="text-xs font-medium text-slate-600"),
-        *chips,
-    ])
+                                      series_pick=series_pick)
 
 
 def download_csv(ids, range_key):
@@ -2056,7 +2187,7 @@ def download_csv(ids, range_key):
         return dash.no_update, ui.alert("no measurements in the selected range", "amber")
     filename = f"{rows[0]['experiment']}.csv" if len(ids) == 1 else "experiments.csv"
     return (dcc.send_string(rows_to_csv(rows), filename),
-            ui.alert(f"exported {len(rows)} measurements ({RANGE_TEXT.get(range_key)}), "
+            ui.alert(f"exported {len(rows)} measurements ({RANGE_LONG.get(range_key)}), "
                      f"file: {filename}", "green"))
 
 

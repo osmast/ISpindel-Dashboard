@@ -25,8 +25,10 @@ def page(children):
             #     ],
             # ),
             html.Main(
-                # Full width on a laptop, capped on very large screens (1536px = Tailwind 2xl).
-                className="mx-auto flex w-full max-w-[1536px] flex-col gap-4 p-4 md:gap-6 md:p-6",
+                # The whole page is capped at 1280px (Tailwind `max-w-7xl`) and centred: on a very
+                # wide monitor the content stays a readable dashboard instead of stretching to the
+                # full window. The padding keeps the cards off the screen edge on a phone.
+                className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 p-4 md:gap-6 md:p-6",
                 children=children,
             ),
         ],
@@ -151,12 +153,15 @@ def button(id, label, tone="dark", extra="", compact=False, **kwargs):
     )
 
 
-def field(label, control):
+def field(label, control, className=""):
     """A labelled control: caption + control, in a `<div>` not a `<label>` (a nested label makes
-    dcc.RadioItems snap back to its first option)."""
+    dcc.RadioItems snap back to its first option). A falsy `label` renders the control **without**
+    its caption (the chart control row wants bare selectors). `className` adds placement utilities -
+    e.g. the three-column chart controls use `justify-self-*` / `text-*` to align each column."""
+    caption = [html.Span(label, className="text-slate-600")] if label else []
     return html.Div(
-        className="grid gap-1 text-sm",
-        children=[html.Span(label, className="text-slate-600"), control],
+        className=f"grid gap-1 text-sm {className}",
+        children=[*caption, control],
     )
 
 

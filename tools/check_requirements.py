@@ -681,13 +681,17 @@ for day in range(3):                     # rows on day 1, 2 and 3 (base + 1..3)
 meas_ids = [r["id"] for r in main.query(
     "SELECT id FROM measurement WHERE experiment_id = %s ORDER BY recorded_at", (exp_meas,))]
 
-table = plain(main.measurement_form(exp_meas))
-dump = json.dumps(table, default=str, ensure_ascii=False)
-check("FR-06 the edit dialog lists every measurement with a note input",
-      dump.count("meas-input") == 3 and dump.count("meas-save") == 3
-      and dump.count("meas-del") == 3 and main.MEAS_HEADERS[:5] ==
-      ["Time (local)", "Tilt °", "Temp °C", "Gravity °P", "Battery V"],
-      f"{dump.count('meas-input')} inputs / {dump.count('meas-del')} delete icons")
+grid = plain(main.measurement_form(exp_meas))
+grid_rows = main.measurement_grid_rows(exp_meas)
+fields = [column.get("field") for column in main.MEAS_COLUMNS]
+check("FR-06 the edit dialog lists every measurement in an editable AG Grid",
+      "AgGrid" in json.dumps(grid, default=str)
+      and len(grid_rows) == 3
+      and fields[:5] == ["time", "tilt", "temp", "gravity", "battery"]
+      and any(column.get("editable") for column in main.MEAS_COLUMNS)
+      and any(column.get("cellRenderer") == "measDeleteRenderer"
+              for column in main.MEAS_COLUMNS),
+      f"{len(grid_rows)} rows / fields={fields}")
 
 alert, delta = main.save_measurement_note(meas_ids[0], "dry hopped")
 stored_note = main.query("SELECT note FROM measurement WHERE id = %s", (meas_ids[0],))[0]["note"]

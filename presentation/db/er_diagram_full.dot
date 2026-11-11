@@ -1,0 +1,35 @@
+// iSpindel fermentation monitor - ER diagram (complete, D1 version)
+// Source of truth: sql/schema.sql. Render with:
+//   dot -Tsvg er_diagram_full.dot -o er_diagram_full.svg
+//   dot -Tpng -Gdpi=200 er_diagram_full.dot -o er_diagram_full.png
+digraph er_diagram_full {
+    graph [rankdir=TB, splines=ortho, nodesep=0.55, ranksep=0.55,
+           pad=0.25, bgcolor="white", fontname="Helvetica"];
+    node  [shape=record, fontname="Helvetica", fontsize=10, penwidth=1.3,
+           color="#0057B7", style="rounded,filled"];
+    edge  [fontname="Helvetica", fontsize=9, color="#64748B", arrowsize=0.7,
+           dir=forward, arrowhead=crow];
+
+    mqtt_broker [label="{mqtt_broker|id : bigint  PK\l|label : text  UNIQUE\l|host : text\l|port : int  CHECK 1..65535\l|username : text\l|password : text\l|topic_prefix : text  DEFAULT 'ispindel'\l|is_enabled : bool  DEFAULT true\l|created_at : timestamptz\l|last_connected_at : timestamptz\l|last_message_at : timestamptz\l|last_error : text\l}", fillcolor="#DBEAFE"];
+
+    device [label="{device|id : bigint  PK\l|broker_id : bigint  FK  (NULL = config.yml)\l|mqtt_name : text\l|display_name : text\l|is_active : bool  DEFAULT true\l|first_seen_at : timestamptz\l|UNIQUE (COALESCE(broker_id,0), mqtt_name)\l}", fillcolor="#FEF3C7"];
+
+    experiment [label="{experiment|id : bigint  PK\l|name : text  UNIQUE  (FR-02)\l|device_id : bigint  FK\l|started_at : timestamptz\l|ended_at : timestamptz  (NULL = active, FR-04)\l|beer_style : text\l|og_plato : numeric(5,2)\l|yeast : text\l|responsible : text\l|notes : text\l|created_at : timestamptz\l|EXCLUDE gist (device_id, tstzrange)  (FR-03/09)\l}", fillcolor="#FEF3C7"];
+
+    measurement [label="{measurement|id : bigint  PK\l|device_id : bigint  FK\l|experiment_id : bigint  FK  (NULL = unassigned, FR-10)\l|recorded_at : timestamptz  (UTC, FR-08)\l|tilt_deg : numeric(5,2)\l|temp_c : numeric(5,2)\l|gravity_plato : numeric(5,2)\l|battery_v : numeric(4,3)\l|interval_s : int\l|rssi_dbm : smallint\l|gravity_raw : numeric(6,4)\l|temp_raw : numeric(6,3)\l|temp_unit : text\l|received_at : timestamptz\l|note : text  (FR-06)\l|UNIQUE (device_id, recorded_at)  (FR-11)\l}", fillcolor="#DBEAFE"];
+
+    experiment_event [label="{experiment_event|id : bigint  PK\l|experiment_id : bigint  FK  ON DELETE CASCADE\l|occurred_at : timestamptz\l|kind : text\l|note : text\l}", fillcolor="#F1F5F9"];
+
+    views [shape=note, style="filled", fillcolor="#F8FAFC", color="#94A3B8", fontsize=9, label="Views used by the dashboard:\l  v_device_latest  ->  FR-13, FR-19\l  v_experiment_overview  ->  FR-05\l"];
+
+    // 2 x 2 grid + the event table and the view note below
+    { rank=same; mqtt_broker; device; }
+    { rank=same; experiment; measurement; }
+    { rank=same; experiment_event; views; }
+
+    mqtt_broker -> device [xlabel="1 : N"];
+    device -> experiment [xlabel="1 : N"];
+    device -> measurement [xlabel="1 : N"];
+    experiment -> measurement [xlabel="1 : N"];
+    experiment -> experiment_event [xlabel="1 : N"];
+}

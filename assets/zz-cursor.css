@@ -1,0 +1,26 @@
+/* One cursor image, loaded after tailwind.css so it wins over the compiled hover rule there.
+ *
+ * The empty glass (`cursor-beer.svg` / `.png`) is the only pointer: clickable elements inherit it
+ * instead of swapping to the removed `cursor-beer-hover.svg`. `cursor: inherit` also neutralises
+ * the `cursor-pointer` utility that the Python components put on rows and <summary> elements.
+ * Guarded by `pointer: fine` (NFR-06): a touch device has no cursor to restyle.
+ */
+@media (pointer: fine) {
+  html {
+    cursor: url("cursor-beer.png") 7 7, url("cursor-beer.svg") 7 7, auto;
+  }
+
+  a,
+  button,
+  summary,
+  label,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="radio"],
+  [role="checkbox"],
+  [role="switch"],
+  .cursor-pointer {
+    cursor: inherit;
+  }
+}

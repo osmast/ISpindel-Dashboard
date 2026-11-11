@@ -4,14 +4,20 @@
 Run:  python presentation/build_deck.py
 Out:  presentation/iSpindel_Final_Presentation.pptx
 
-The deck has 20 slides and is written for TWO speakers who alternate.
-Every slide says which speaker owns it and every content line is a
-placeholder inside [ ... ] so the owners only replace the text.
+The deck follows the four parts the assignment asks for (chapter
+"5. Deliverables and Presentation"):
 
-NOTE: this script is a *build tool*, not part of the runtime stack - it is
-not imported by the app and is not needed to run the system (NFR-08 is
-unaffected: no setting is hard-coded anywhere; the deck is a document).
+    1. Concept              - architecture, data model, technology choice
+    2. Live system          - the running dashboard and its main functions
+    3. Interpretation       - our beer vs. the hand sketch, the two questions
+    4. Outlook              - what we would improve in a next iteration
+
+It is a *build tool*, not part of the runtime stack: nothing in the app
+imports it and it is not needed to run the system (NFR-08 is unaffected -
+the deck is a document, not a setting).
 """
+
+import os
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -19,12 +25,8 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
-import os
-
 # ---------------------------------------------------------------------------
-# Themes / templates. Each entry is a self-contained palette + font, so the
-# same 20 slides render in several presentation templates. Colours are
-# literals on purpose: this is a document generator, not the web UI.
+# Palette - the app's brand blue + beer amber
 # ---------------------------------------------------------------------------
 def _hex(value):
     """'#RRGGBB' -> RGBColor."""
@@ -32,61 +34,6 @@ def _hex(value):
     return RGBColor(int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))
 
 
-# Five+ reusable presentation templates. `classic` is the app's brand palette.
-THEMES = {
-    "classic": {
-        "label": "Classic - brand blue + beer amber",
-        "ink": "#111827", "muted": "#64748B", "brand": "#0057B7",
-        "accent": "#D97706", "accent_dark": "#92400E",
-        "paper": "#FFFFFF", "card": "#F1F5F9",
-        "card_a": "#FEF3C7", "card_b": "#DBEAFE",
-        "font": "Calibri",
-    },
-    "nordic": {
-        "label": "Nordic - deep teal + copper",
-        "ink": "#0F2E2E", "muted": "#5B7373", "brand": "#0E7490",
-        "accent": "#B45309", "accent_dark": "#7C2D12",
-        "paper": "#F8FAF9", "card": "#E8F0EE",
-        "card_a": "#FCE7D6", "card_b": "#D5EBEB",
-        "font": "Segoe UI",
-    },
-    "midnight": {
-        "label": "Midnight - dark navy + cyan + amber",
-        "ink": "#E5EAF2", "muted": "#8B9BB4", "brand": "#22D3EE",
-        "accent": "#F59E0B", "accent_dark": "#FCD34D",
-        "paper": "#0B1220", "card": "#162033",
-        "card_a": "#1E2A3B", "card_b": "#12303A",
-        "font": "Segoe UI",
-    },
-    "mono": {
-        "label": "Mono - charcoal + grey, minimal",
-        "ink": "#1F2937", "muted": "#6B7280", "brand": "#374151",
-        "accent": "#6B7280", "accent_dark": "#4B5563",
-        "paper": "#FAFAFA", "card": "#F3F4F6",
-        "card_a": "#EDEDED", "card_b": "#E5E7EB",
-        "font": "Segoe UI",
-    },
-    "warm": {
-        "label": "Warm - burgundy + gold, serif",
-        "ink": "#2B1B1B", "muted": "#7A5C5C", "brand": "#7F1D1D",
-        "accent": "#B7791F", "accent_dark": "#78350F",
-        "paper": "#FFFBF5", "card": "#F7EDE2",
-        "card_a": "#FBEFD8", "card_b": "#F3E1E1",
-        "font": "Georgia",
-    },
-    "ocean": {
-        "label": "Ocean - royal blue + coral",
-        "ink": "#0B2545", "muted": "#5B6B85", "brand": "#1D4ED8",
-        "accent": "#F97316", "accent_dark": "#9A3412",
-        "paper": "#F5F9FF", "card": "#E7EFFA",
-        "card_a": "#FFE9D6", "card_b": "#DBEAFE",
-        "font": "Segoe UI",
-    },
-}
-
-DEFAULT_THEME = "classic"
-
-# The active palette (reassigned by apply_theme before each build).
 INK = _hex("#111827")
 MUTED = _hex("#64748B")
 BRAND = _hex("#0057B7")
@@ -96,28 +43,14 @@ PAPER = _hex("#FFFFFF")
 CARD = _hex("#F1F5F9")
 CARD_A = _hex("#FEF3C7")
 CARD_B = _hex("#DBEAFE")
+GREEN = _hex("#15803D")
+RED = _hex("#B91C1C")
 FONT = "Calibri"
 
+SW, SH = Inches(13.333), Inches(7.5)      # 16:9
 
-def apply_theme(name=DEFAULT_THEME):
-    """Switch the active palette to one of THEMES (module-level globals)."""
-    global INK, MUTED, BRAND, AMBER, AMBER_DARK, PAPER, CARD, CARD_A, CARD_B, FONT
-    t = THEMES[name]
-    INK = _hex(t["ink"])
-    MUTED = _hex(t["muted"])
-    BRAND = _hex(t["brand"])
-    AMBER = _hex(t["accent"])
-    AMBER_DARK = _hex(t["accent_dark"])
-    PAPER = _hex(t["paper"])
-    CARD = _hex(t["card"])
-    CARD_A = _hex(t["card_a"])
-    CARD_B = _hex(t["card_b"])
-    FONT = t["font"]
-
-SW, SH = Inches(13.333), Inches(7.5)      # 16:9 default for pptx
-
-SPEAKER_A = "SPEAKER A - THE BREWER / BUILDER"
-SPEAKER_B = "SPEAKER B - THE BREWMASTER'S VOICE (newcomer)"
+HERE = os.path.dirname(os.path.abspath(__file__))
+SHOTS = os.path.join(HERE, "screenshots")
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +73,17 @@ def _add_box(slide, x, y, w, h, fill=None, line=None, shape=MSO_SHAPE.RECTANGLE,
     return box
 
 
+def _hanging(paragraph, indent=0.22):
+    """Give a bullet paragraph a hanging indent so wrapped lines align."""
+    pPr = paragraph._p.get_or_add_pPr()
+    pPr.set("marL", str(int(Inches(indent))))
+    pPr.set("indent", str(int(-Inches(indent))))
+
+
 def _text(slide, x, y, w, h, runs, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP,
-          wrap=True):
-    """runs = list of paragraphs; each paragraph = list of (text, size, bold, color, italic)."""
+          wrap=True, space_after=0, line_spacing=None):
+    """runs = list of paragraphs; each paragraph = list of
+    (text, size, bold, color, italic)."""
     tb = slide.shapes.add_textbox(x, y, w, h)
     tf = tb.text_frame
     tf.word_wrap = wrap
@@ -150,6 +91,10 @@ def _text(slide, x, y, w, h, runs, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP,
     for i, para in enumerate(runs):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.alignment = align
+        if space_after:
+            p.space_after = Pt(space_after)
+        if line_spacing:
+            p.line_spacing = line_spacing
         for (txt, size, bold, color, *rest) in para:
             r = p.add_run()
             r.text = txt
@@ -168,19 +113,10 @@ def _blank(prs):
     return s
 
 
-def _speaker_tag(slide, speaker):
-    """Coloured pill in the top-right corner that names the speaker."""
-    if speaker == "A":
-        fill, txt = CARD_A, AMBER_DARK
-        label = SPEAKER_A
-    elif speaker == "B":
-        fill, txt = CARD_B, BRAND
-        label = SPEAKER_B
-    else:  # both
-        fill, txt = CARD, MUTED
-        label = "BOTH SPEAKERS"
-    pill = _add_box(slide, SW - Inches(4.9), Inches(0.28), Inches(4.6),
-                    Inches(0.46), fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+def _badge(slide, label, fill=CARD, color=MUTED, y=Inches(0.30)):
+    """Rounded pill in the top-right corner naming the part."""
+    pill = _add_box(slide, SW - Inches(3.6), y, Inches(3.0),
+                    Inches(0.44), fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
     tf = pill.text_frame
     tf.word_wrap = False
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -191,27 +127,28 @@ def _speaker_tag(slide, speaker):
     r.font.size = Pt(11)
     r.font.bold = True
     r.font.name = FONT
-    r.font.color.rgb = txt
+    r.font.color.rgb = color
 
 
-def _title(slide, text, speaker=None, kicker=None):
+def _title(slide, text, kicker=None, badge=None, badge_fill=CARD,
+           badge_color=MUTED, size=30):
     if kicker:
-        _text(slide, Inches(0.6), Inches(0.35), Inches(8), Inches(0.4),
+        _text(slide, Inches(0.6), Inches(0.35), Inches(8.5), Inches(0.4),
               [[(kicker, 12, True, AMBER)]])
         ty = Inches(0.72)
     else:
         ty = Inches(0.45)
-    _text(slide, Inches(0.6), ty, Inches(8), Inches(0.8),
-          [[(text, 30, True, INK)]])
-    if speaker:
-        _speaker_tag(slide, speaker)
+    _text(slide, Inches(0.6), ty, Inches(8.6), Inches(0.8),
+          [[(text, size, True, INK)]])
+    if badge:
+        _badge(slide, badge, fill=badge_fill, color=badge_color)
     _add_box(slide, Inches(0.63), ty + Inches(0.86), Inches(1.4),
              Pt(3), fill=AMBER)
 
 
 def _footer(slide, n):
-    # thin rule + a rounded slide-number badge (theme-aware)
-    _add_box(slide, Inches(0.6), SH - Inches(0.66), Inches(12.13), Pt(1), fill=CARD)
+    _add_box(slide, Inches(0.6), SH - Inches(0.66), Inches(12.13), Pt(1),
+             fill=CARD)
     _text(slide, Inches(0.6), SH - Inches(0.52), Inches(9), Inches(0.35),
           [[("iSpindel Fermentation Monitor - ZHAW Digital Food Processing HS26 - D4",
              10, False, MUTED)]])
@@ -229,86 +166,573 @@ def _footer(slide, n):
     r.font.color.rgb = PAPER
 
 
-def _card(slide, x, y, w, h, heading, bullets, fill=CARD, head_color=INK):
+def _card(slide, x, y, w, h, heading, bullets, fill=CARD, head_color=INK,
+          body_size=13, head_size=15):
     _add_box(slide, x, y, w, h, fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
-    runs = [[(heading, 15, True, head_color)]]
+    runs = [[(heading, head_size, True, head_color)]]
     for b in bullets:
-        runs.append([(b, 13, False, INK)])
-    _text(slide, x + Inches(0.25), y + Inches(0.2), w - Inches(0.5),
-          h - Inches(0.35), runs)
+        runs.append([(b, body_size, False, INK)])
+    tb = _text(slide, x + Inches(0.25), y + Inches(0.2), w - Inches(0.5),
+               h - Inches(0.35), runs, space_after=5)
+    # hanging indent for every bullet paragraph (skip the heading)
+    for p in tb.text_frame.paragraphs[1:]:
+        _hanging(p)
+    return tb
+
+
+def _picture_fit(slide, path, x, y, w, h, border=True):
+    """Place a picture centred inside the box, preserving its aspect ratio."""
+    from PIL import Image
+    iw, ih = Image.open(path).size
+    scale = min(w / iw, h / ih)
+    pw, ph = int(iw * scale), int(ih * scale)
+    px = x + (w - pw) // 2
+    py = y + (h - ph) // 2
+    pic = slide.shapes.add_picture(path, px, py, width=pw, height=ph)
+    if border:
+        pic.line.color.rgb = CARD
+        pic.line.width = Pt(1)
+    return pic
+
+
+def _table(slide, x, y, w, h, data, col_widths, header_fill=BRAND,
+           header_color=PAPER, body_fill=PAPER, alt_fill=CARD, size=11,
+           header_size=11, bold_first_col=False):
+    rows, cols = len(data), len(data[0])
+    shape = slide.shapes.add_table(rows, cols, x, y, w, h)
+    table = shape.table
+    table.first_row = True
+    table.horz_banding = False
+    for i, cw in enumerate(col_widths):
+        table.columns[i].width = cw
+    for r, row in enumerate(data):
+        for c, val in enumerate(row):
+            cell = table.cell(r, c)
+            cell.margin_left = Inches(0.08)
+            cell.margin_right = Inches(0.08)
+            cell.margin_top = Inches(0.03)
+            cell.margin_bottom = Inches(0.03)
+            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+            cell.fill.solid()
+            if r == 0:
+                cell.fill.fore_color.rgb = header_fill
+            else:
+                cell.fill.fore_color.rgb = alt_fill if (r % 2 == 0) else body_fill
+            tf = cell.text_frame
+            tf.word_wrap = True
+            p = tf.paragraphs[0]
+            p.alignment = PP_ALIGN.LEFT
+            run = p.add_run()
+            run.text = str(val)
+            run.font.size = Pt(header_size if r == 0 else size)
+            run.font.bold = (r == 0) or (bold_first_col and c == 0)
+            run.font.name = FONT
+            run.font.color.rgb = header_color if r == 0 else INK
+    return table
+
+
+def _arrow_down(slide, x, y, w, h):
+    _add_box(slide, x, y, w, h, fill=MUTED, shape=MSO_SHAPE.DOWN_ARROW)
+
+
+def _notes(slide, text):
+    """Speaker notes: timing, cue and the one thing to say out loud."""
+    slide.notes_slide.notes_text_frame.text = text
 
 
 # ---------------------------------------------------------------------------
-# Slide builders
+# Slides
 # ---------------------------------------------------------------------------
 def slide_title(prs, n):
     s = _blank(prs)
     _add_box(s, 0, 0, SW, Inches(0.35), fill=AMBER)
     _add_box(s, 0, Inches(0.35), SW, Inches(0.15), fill=BRAND)
-    _text(s, Inches(1.0), Inches(1.6), SW - Inches(2), Inches(1.4),
-          [[("[ Title of your presentation ]", 44, True, INK)]])
-    _text(s, Inches(1.0), Inches(2.95), SW - Inches(2), Inches(1.2),
-          [[("[ Subtitle - beer + fermentation monitoring with the iSpindel ]",
-             20, False, MUTED)]])
-    _text(s, Inches(1.0), Inches(4.4), SW - Inches(2), Inches(1.8),
-          [[("Speaker A - [ name ]  |  Brewer / Builder", 15, True, AMBER_DARK)],
-           [("Speaker B - [ name ]  |  Brewmaster's voice", 15, True, BRAND)],
-           [("ZHAW - Digital Food Processing HS26 / AD24 - Final Presentation (D4)",
+
+    _text(s, Inches(1.0), Inches(1.35), SW - Inches(2), Inches(0.4),
+          [[("ZHAW - DIGITAL FOOD PROCESSING HS26 / AD24", 13, True, AMBER)]])
+    _text(s, Inches(1.0), Inches(1.85), SW - Inches(2), Inches(1.3),
+          [[("iSpindel Fermentation Monitor", 46, True, INK)]])
+    _text(s, Inches(1.0), Inches(3.05), SW - Inches(2), Inches(1.0),
+          [[("Two beers, one dashboard - concept, live system, data "
+             "interpretation, outlook", 20, False, MUTED)]])
+
+    _add_box(s, Inches(1.0), Inches(4.15), Inches(5.6), Pt(2), fill=CARD)
+    _text(s, Inches(1.0), Inches(4.35), SW - Inches(2), Inches(1.8),
+          [[("Final presentation (D4)  -  12.11.2026", 15, True, INK)],
+           [("15 minutes plus questions  -  with live demo and tasting", 14, False, MUTED)],
+           [("Oskar  -  Dark Day (dark stout)   |   Anja  -  Mango Maracuya Dream",
+             14, True, BRAND)],
+           [("One beer logged with the iSpindel, one assessed the traditional way.",
              13, False, MUTED)],
-           [("Date: [ 12.11.2026 ] - 15 minutes plus questions - with live demo",
-             13, False, MUTED)]])
+           [("Live dashboard:  http://[ hostname ]:8080", 13, False, MUTED)]],
+          space_after=4)
+    _notes(s, "0:00-0:30 | Oskar & Anja. Welcome, name the two beers, one sentence "
+              "on what the system does. Mention the live demo and the tasting.")
     _footer(s, n)
     return s
 
 
 def slide_agenda(prs, n):
     s = _blank(prs)
-    _title(s, "Agenda & who presents what", speaker=None, kicker="OVERVIEW")
-    _card(s, Inches(0.6), Inches(1.9), Inches(6.0), Inches(4.6),
-          "Speaker A - Brewer / Builder (beer + system)",
-          ["1. [ Our two beers: recipe, grain, hops, yeast ]",
-           "2. [ Brew day + fermentation process ]",
-           "3. [ Architecture, data model, technology ]",
-           "4. [ Live demo of the running system ]",
-           "5. [ Outlook / next iteration ]"], fill=CARD_A,
-          head_color=AMBER_DARK)
-    _card(s, Inches(6.9), Inches(1.9), Inches(5.8), Inches(4.6),
-          "Speaker B - Brewmaster's voice (user + concept)",
-          ["1. [ What a brewmaster needs from the data ]",
-           "2. [ The two brewmaster questions ]",
-           "3. [ How the concept / recipes were structured ]",
-           "4. [ Reading the fermentation curve as a user ]",
-           "5. [ Requirement checklist: does it hold up? ]"],
-          fill=CARD_B, head_color=BRAND)
+    _title(s, "The presentation in four parts", kicker="AGENDA",
+           badge="D4  -  15 MIN + QUESTIONS")
+
+    parts = [
+        ("1", "Concept", "Architecture on the automation pyramid, the data "
+         "model, and the technology choice with its justification.", CARD_A,
+         AMBER_DARK),
+        ("2", "Live system", "The running web app: device cards, live chart, "
+         "start/end an experiment, compare batches, CSV export.", CARD_B, BRAND),
+        ("3", "Interpretation of the data", "Mango Maracuya Dream (logged) and "
+         "Dark Day (traditional), the hand sketch, the two questions - and a "
+         "tasting of both beers.", CARD_A, AMBER_DARK),
+        ("4", "Outlook", "What we would improve in a next iteration - technical "
+         "and user-facing.", CARD_B, BRAND),
+    ]
+    x0, y0 = Inches(0.6), Inches(1.95)
+    cw, ch, gap = Inches(5.95), Inches(2.15), Inches(0.23)
+    for i, (num, head, body, fill, hc) in enumerate(parts):
+        col, row = i % 2, i // 2
+        x = x0 + col * (cw + gap)
+        y = y0 + row * (ch + gap)
+        _add_box(s, x, y, cw, ch, fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+        _text(s, x + Inches(0.25), y + Inches(0.18), Inches(0.7), Inches(0.7),
+              [[(num, 30, True, hc)]])
+        _text(s, x + Inches(0.95), y + Inches(0.2), cw - Inches(1.2),
+              Inches(0.5), [[(head, 17, True, hc)]])
+        _text(s, x + Inches(0.95), y + Inches(0.72), cw - Inches(1.2),
+              ch - Inches(0.9), [[(body, 13, False, INK)]])
+    _text(s, Inches(0.6), Inches(6.55), Inches(12.1), Inches(0.4),
+          [[("Must requirements first - Should and Could only add value on top "
+             "of a working core system.", 12, True, AMBER_DARK)]])
+    _notes(s, "0:30-1:00 | Both. Walk the four parts; mention the web-app demo "
+              "and the tasting so the audience knows the structure.")
     _footer(s, n)
     return s
 
 
-def two_col(prs, n, title, kicker, speaker, left_head, left_rows,
-            right_head, right_rows, fill_l=CARD_A, fill_r=CARD_B,
-            hc_l=AMBER_DARK, hc_r=BRAND, note=None):
+def slide_architecture(prs, n):
     s = _blank(prs)
-    _title(s, title, speaker=speaker, kicker=kicker)
-    _card(s, Inches(0.6), Inches(1.95), Inches(5.95), Inches(4.6),
-          left_head, left_rows, fill=fill_l, head_color=hc_l)
-    _card(s, Inches(6.75), Inches(1.95), Inches(5.95), Inches(4.6),
-          right_head, right_rows, fill=fill_r, head_color=hc_r)
-    if note:
-        _text(s, Inches(0.6), Inches(6.55), Inches(12.1), Inches(0.4),
-              [[(note, 12, True, AMBER_DARK)]])
+    _title(s, "Architecture on the automation pyramid", kicker="1 - CONCEPT",
+           badge="1  -  CONCEPT", badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    # Left: the data flow, one box per level
+    x, w = Inches(0.6), Inches(5.7)
+    y = Inches(1.95)
+    bh, gap = Inches(0.82), Inches(0.22)
+    levels = [
+        ("FIELD", "iSpindel in the fermenter",
+         "tilt -> gravity, temperature, battery", CARD_A, AMBER_DARK),
+        ("CONTROL - RASPBERRY PI", "mosquitto + ingest service",
+         "7 MQTT messages -> one row per transmission", CARD_B, BRAND),
+        ("SUPERVISORY (MES)", "PostgreSQL",
+         "device / experiment / measurement", CARD_A, AMBER_DARK),
+        ("USER LEVEL", "Plotly Dash + gunicorn",
+         "browser in the local network, http://hostname:8080", CARD_B, BRAND),
+    ]
+    for i, (lvl, comp, detail, fill, hc) in enumerate(levels):
+        _add_box(s, x, y, w, bh, fill=fill, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+        _text(s, x + Inches(0.2), y + Inches(0.08), w - Inches(0.4),
+              Inches(0.3), [[(lvl, 10, True, hc)]])
+        _text(s, x + Inches(0.2), y + Inches(0.32), w - Inches(0.4),
+              Inches(0.3), [[(comp, 14, True, INK)]])
+        _text(s, x + Inches(0.2), y + Inches(0.58), w - Inches(0.4),
+              Inches(0.25), [[(detail, 10, False, MUTED)]])
+        if i < len(levels) - 1:
+            _arrow_down(s, x + w // 2 - Inches(0.12), y + bh + Inches(0.02),
+                        Inches(0.24), gap - Inches(0.04))
+        y += bh + gap
+
+    # Right: the level table
+    data = [
+        ["Level", "Component", "Why it belongs there"],
+        ["Field", "iSpindel", "raw process data: tilt -> gravity, temperature, battery"],
+        ["Control", "Pi: mosquitto + ingest", "receives and processes locally; monitoring only, no actuators"],
+        ["Supervisory (MES)", "PostgreSQL", "structured storage and assignment of measurements to batches"],
+        ["Enterprise (ERP)", "-", "out of scope; a later batch-management / QA hand-off"],
+    ]
+    _table(s, Inches(6.55), Inches(1.95), Inches(6.18), Inches(3.9), data,
+           [Inches(1.35), Inches(1.75), Inches(3.08)], size=10.5,
+           header_size=10.5, bold_first_col=True)
+    _text(s, Inches(6.55), Inches(6.0), Inches(6.18), Inches(0.5),
+          [[("Monitoring only: the control level acquires data, it does not "
+             "control the fermenter.", 11, True, AMBER_DARK)]])
+    _notes(s, "1:00-2:00 | Concept. Point at the four levels; stress monitoring "
+              "only, no actuators. The broker may run off the Pi.")
     _footer(s, n)
     return s
 
 
-def full_card(prs, n, title, kicker, speaker, heading, bullets, fill=CARD,
-              head_color=INK, note=None):
+def slide_data_model(prs, n):
     s = _blank(prs)
-    _title(s, title, speaker=speaker, kicker=kicker)
-    _card(s, Inches(0.6), Inches(1.95), Inches(12.1), Inches(4.6),
-          heading, bullets, fill=fill, head_color=head_color)
-    if note:
-        _text(s, Inches(0.6), Inches(6.55), Inches(12.1), Inches(0.4),
-              [[(note, 12, True, AMBER_DARK)]])
+    _title(s, "Data model: separated, linked entities", kicker="1 - CONCEPT",
+           badge="1  -  CONCEPT", badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    _picture_fit(s, os.path.join(HERE, "db", "er_diagram_slide.png"),
+                 Inches(0.6), Inches(1.95), Inches(7.2), Inches(4.35))
+
+    _card(s, Inches(8.0), Inches(1.95), Inches(4.73), Inches(4.35),
+          "Constraints that carry requirements",
+          ["- experiment.name UNIQUE  ->  FR-02",
+           "- EXCLUDE gist (device_id, tstzrange)  ->  FR-03 / FR-09",
+           "- measurement UNIQUE (device_id, recorded_at)  ->  FR-11",
+           "- experiment_id nullable  ->  FR-10",
+           "- new device/experiment: no schema change  ->  FR-12",
+           "- one transmission = one row"],
+          fill=CARD_B, head_color=BRAND, body_size=11)
+    _text(s, Inches(0.6), Inches(6.4), Inches(12.1), Inches(0.4),
+          [[("The database enforces the rules - the dashboard does not have to "
+             "trust its own code.", 12, True, AMBER_DARK)]])
+    _notes(s, "2:00-3:00 | Concept. The database enforces the rules: unique name, "
+              "one active experiment, no duplicate rows. A new device or experiment "
+              "needs no schema change.")
+    _footer(s, n)
+    return s
+
+
+def slide_technology(prs, n):
+    s = _blank(prs)
+    _title(s, "Technology choice - and why", kicker="1 - CONCEPT",
+           badge="1  -  CONCEPT", badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    data = [
+        ["Layer", "Choice", "Why this one", "Alternative rejected"],
+        ["Storage", "PostgreSQL 16", "relational batch structure, timestamptz (UTC, DST-safe), exclusion constraints enforce one active experiment", "SQLite / InfluxDB"],
+        ["Acquisition", "Python + paho-mqtt", "assembles 7 messages into one row, normalises units, reconnects after outages", "Node-RED / Telegraf"],
+        ["Dashboard", "Plotly Dash + Tailwind", "native Plotly charts, callbacks in Python, free responsive layout", "Grafana / Streamlit"],
+        ["Broker", "mosquitto", "data stays in the local network; no public broker", "public broker / HiveMQ"],
+        ["Web server", "gunicorn", "restart after a power failure, no debugger on 0.0.0.0", "Dash development server"],
+        ["Deployment", "Podman / Docker Compose", "the same stack on a laptop and on the Pi - three core containers (db, broker, dashboard) plus optional ingest", "bare-metal install"],
+    ]
+    _table(s, Inches(0.6), Inches(1.95), Inches(12.13), Inches(4.5), data,
+           [Inches(1.35), Inches(2.35), Inches(5.55), Inches(2.88)],
+           size=10.5, header_size=10.5, bold_first_col=True)
+    _text(s, Inches(0.6), Inches(6.55), Inches(12.1), Inches(0.4),
+          [[("The full justification, the alternatives and the assumptions "
+             "A1-A8 are in the D1 concept.", 12, True, AMBER_DARK)]])
+    _notes(s, "3:00-4:00 | Concept. One line per layer: what we picked, why, what "
+              "we rejected. The full justification is in D1.")
+    _footer(s, n)
+    return s
+
+
+def slide_live_demo_placeholder(prs, n):
+    s = _blank(prs)
+    _title(s, "Live demo - the web app", kicker="2 - LIVE SYSTEM",
+           badge="2  -  LIVE SYSTEM", badge_fill=CARD_B, badge_color=BRAND)
+
+    # The big callout: leave the deck, show the app, come back here.
+    _add_box(s, Inches(0.6), Inches(1.95), Inches(12.13), Inches(1.15),
+             fill=CARD_B, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+    _text(s, Inches(0.9), Inches(2.05), Inches(11.5), Inches(0.5),
+          [[("Switch to the web app now  ->  http://[ hostname ]:8080",
+             22, True, BRAND)]])
+    _text(s, Inches(0.9), Inches(2.55), Inches(11.5), Inches(0.4),
+          [[("Show the running system, then return to this slide for the next topic.",
+             13, False, MUTED)]])
+
+    _card(s, Inches(0.6), Inches(3.3), Inches(5.95), Inches(3.2),
+          "What we will show in the app",
+          ["1. Device cards: latest gravity, temperature, tilt, battery (FR-13)",
+           "2. Live chart updates within 60 s, no reload (FR-14)",
+           "3. Start an experiment with the required fields only (FR-01)",
+           "4. Duplicate name -> clear error (FR-02); end the experiment (FR-04)",
+           "5. Compare two experiments + relative time axis (FR-17 / FR-18)",
+           "6. Export the batch as CSV and open it in Excel (FR-21)"],
+          fill=CARD_B, head_color=BRAND, body_size=11.5)
+
+    _card(s, Inches(6.75), Inches(3.3), Inches(5.98), Inches(3.2),
+          "If the network fails",
+          ["- The same states are in presentation/screenshots/ as backup",
+           "- 00_dashboard_overview.png: the whole page",
+           "- 07_popup_setup_experiment.png: start an experiment",
+           "- 05_tab_devices_brokers.png: devices + brokers",
+           "- 03_chart_comparison_2experiments.png: comparison chart",
+           "- 14_mobile_responsive.png: the phone view"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=11.5)
+    _notes(s, "4:00-8:00 | Oskar. Switch to the web app, show the six functions, "
+              "then return to this slide. If the network fails, use the backup "
+              "screenshots.")
+    _footer(s, n)
+    return s
+
+
+def slide_two_questions(prs, n):
+    s = _blank(prs)
+    _title(s, "The two brewmaster questions", kicker="3 - INTERPRETATION",
+           badge="3  -  INTERPRETATION", badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    _card(s, Inches(0.6), Inches(1.95), Inches(5.95), Inches(4.55),
+          "Question 1 - needs historical data",
+          ["\"Is the Mango Maracuya Dream fermentation finished - is the gravity stable over the last 2-3 days?\"",
+           "",
+           "Why historical: today's value only means something against the last days.",
+           "",
+           "How the dashboard answers it:",
+           "- the whole experiment over its full duration (FR-16)",
+           "- the rate in °P/24 h and the target FG (FR-20)",
+           "- a stable line at the end = ready for the next step"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=12.5)
+
+    _card(s, Inches(6.75), Inches(1.95), Inches(5.98), Inches(4.55),
+          "Question 2 - needs a comparison",
+          ["\"Which batch fermented faster - Mango Maracuya Dream or a previous batch?\"",
+           "",
+           "Why a comparison: two batches only become comparable when they are overlaid.",
+           "",
+           "How the dashboard answers it:",
+           "- two experiments in one chart (FR-17)",
+           "- the axis switched to hours since start (FR-18)",
+           "- the same gravity and temperature scales for both"],
+          fill=CARD_B, head_color=BRAND, body_size=12.5)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("Dark Day has no sensor data, so it is assessed the traditional way "
+             "(next slides). The dashboard answers Q1 and Q2 for the logged beer.",
+             12, True, AMBER_DARK)]])
+    _notes(s, "8:00-9:00 | Interpretation. Read both questions; say which needs "
+              "history and which needs a comparison. Note that Dark Day has no "
+              "sensor data and is assessed traditionally.")
+    _footer(s, n)
+    return s
+
+
+def slide_sketch(prs, n):
+    s = _blank(prs)
+    _title(s, "The hand sketch vs. the real fermentation",
+           kicker="3 - INTERPRETATION", badge="3  -  INTERPRETATION",
+           badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    _card(s, Inches(0.6), Inches(1.95), Inches(5.35), Inches(4.55),
+          "What we expected (hand sketch)",
+          ["Lag phase: gravity nearly flat, temperature follows the ambient.",
+           "",
+           "Main fermentation: gravity falls steeply, temperature rises because the yeast is exothermic.",
+           "",
+           "End of fermentation: gravity stable over 2-3 days - the beer is ready for the next step.",
+           "",
+           "The sketch is the reference we compare the measured curve against."],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=12.5)
+
+    _picture_fit(s, os.path.join(SHOTS, "mango_device_card.png"),
+                 Inches(6.15), Inches(1.95), Inches(6.58), Inches(4.55))
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("The measured Mango curve shows the expected steep main phase; the last "
+             "MTB9 segment is the device out of the fermenter, not fermentation.",
+             12, True, AMBER_DARK)]])
+    _notes(s, "9:00-10:00 | Interpretation. Compare the sketch (lag / main / end) "
+              "with the Mango curve. Point at the MTB9 artifact honestly.")
+    _footer(s, n)
+    return s
+
+
+def slide_mango(prs, n):
+    s = _blank(prs)
+    _title(s, "Mango Maracuya Dream - the logged beer",
+           kicker="3 - INTERPRETATION  -  ANJA", badge="3  -  INTERPRETATION",
+           badge_fill=CARD_A, badge_color=AMBER_DARK, size=26)
+
+    _picture_fit(s, os.path.join(SHOTS, "mango_device_card.png"),
+                 Inches(0.6), Inches(1.95), Inches(5.6), Inches(4.55))
+
+    _card(s, Inches(6.45), Inches(1.95), Inches(6.28), Inches(2.15),
+          "The batch",
+          ["- iSpindel MTB9, responsible Anja",
+           "- start 29.10. 19:41, end 05.11. 19:32",
+           "- 203 measurements, interval 900 s",
+           "- original gravity 13.5 °P"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=12)
+
+    _card(s, Inches(6.45), Inches(4.3), Inches(6.28), Inches(2.2),
+          "The fermentation",
+          ["- 13.5 °P -> about 5 °P by 01.11. - the steep main phase",
+           "- the last segment is the device out of the fermenter (artifact), not fermentation",
+           "- temperature around 16 °C",
+           "- Q1: the stable tail answers \"is it finished?\"; Q2: the overlay answers \"which faster?\""],
+          fill=CARD_B, head_color=BRAND, body_size=11.5)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("Only Mango Maracuya Dream was logged with the iSpindel; the other "
+             "batches in the system belong to other teams.", 12, True, AMBER_DARK)]])
+    _notes(s, "10:00-10:30 | Anja. This is the only beer with iSpindel data: the "
+              "batch facts, the curve, and the honest MTB9 artifact. Q1 and Q2 are "
+              "answered here.")
+    _footer(s, n)
+    return s
+
+
+def slide_real_curve(prs, n):
+    s = _blank(prs)
+    _title(s, "All four batches - the real curves",
+           kicker="3 - INTERPRETATION  -  ANJA",
+           badge="3  -  INTERPRETATION", badge_fill=CARD_A,
+           badge_color=AMBER_DARK)
+
+    _picture_fit(s, os.path.join(HERE, "plots", "mango_fermentation.png"),
+                 Inches(0.6), Inches(1.95), Inches(7.7), Inches(4.55))
+
+    _card(s, Inches(8.5), Inches(1.95), Inches(4.23), Inches(4.55),
+          "What the curves say",
+          ["- Mango (amber) is highlighted; CoCo, Honig and Lemon are the comparison batches",
+           "- all four show the same shape: a steep main phase, then a slow tail",
+           "- the X markers are the device-out points (tilt ~90°)",
+           "- Mango real end 31.10. 20:27; UI end 05.11. 19:32"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=10.5)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("The gap is not fermentation - it is the iSpindel lying outside the "
+             "fermenter.", 12, True, AMBER_DARK)]])
+    _notes(s, "10:30-11:30 | Anja. The real curve ends on 31.10.; the 05.11. point "
+              "is the device out of the fermenter. This is the honest reading of the "
+              "data.")
+    _footer(s, n)
+    return s
+
+
+def slide_real_length(prs, n):
+    s = _blank(prs)
+    _title(s, "The real experiment length",
+           kicker="3 - INTERPRETATION  -  ANJA",
+           badge="3  -  INTERPRETATION", badge_fill=CARD_A,
+           badge_color=AMBER_DARK)
+
+    _picture_fit(s, os.path.join(HERE, "plots", "mango_duration.png"),
+                 Inches(0.6), Inches(1.95), Inches(7.7), Inches(4.55))
+
+    _card(s, Inches(8.5), Inches(1.95), Inches(4.23), Inches(4.55),
+          "UI end vs. real end",
+          ["- UI end: 05.11. 19:32 (button pressed)",
+           "- last measurement: 05.11. 13:14 (device out)",
+           "- real fermentation end: 31.10. 20:27",
+           "- real length: 2.1 days; the UI says 7.0 days",
+           "- code fix: ending an experiment now stores the last measurement as `ended_at`"],
+          fill=CARD_B, head_color=BRAND, body_size=10.5)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("The stored end time now follows the data, not the click - FR-04.",
+             12, True, AMBER_DARK)]])
+    _notes(s, "11:30-12:30 | Anja. The UI end is 4.7 days after the last real "
+              "measurement. The code now stores the last measurement as the end, so "
+              "the dashboard tells the same story as the data.")
+    _footer(s, n)
+    return s
+
+
+def slide_dark_doubt(prs, n):
+    s = _blank(prs)
+    _title(s, "Dark Day - the dark stout (Oskar)",
+           kicker="3 - INTERPRETATION", badge="3  -  INTERPRETATION",
+           badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    _card(s, Inches(0.6), Inches(1.95), Inches(5.95), Inches(4.55),
+          "Why there is no iSpindel curve",
+          ["- Dark Day was brewed by Oskar, but the iSpindel was in the Mango fermenter.",
+           "",
+           "So the dark stout has no sensor data - no gravity/temperature curve in the dashboard.",
+           "",
+           "It is assessed the traditional way after fermentation: hydrometer readings and a sensory evaluation.",
+           "",
+           "This is the honest limitation of the project: not every beer was instrumented."],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=12.5)
+
+    _card(s, Inches(6.75), Inches(1.95), Inches(5.98), Inches(4.55),
+          "Traditional assessment after fermentation",
+          ["- Hydrometer: OG [ ... °P ] -> FG [ ... °P ], ABV [ ... % ]",
+           "- Appearance: [ colour, clarity, head ]",
+           "- Aroma: [ roast, coffee, chocolate, ... ]",
+           "- Flavour: [ bitterness, body, finish ]",
+           "- Mouthfeel: [ carbonation, warmth ]",
+           "- Overall: [ the brewer's verdict ]"],
+          fill=CARD_B, head_color=BRAND, body_size=12.5)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("The traditional method is the reference the dashboard would replace - "
+             "for the one beer that was instrumented.", 12, True, AMBER_DARK)]])
+    _notes(s, "12:30-13:15 | Oskar. Explain why Dark Day has no curve and how a "
+              "dark stout is assessed traditionally. Fill in the hydrometer and "
+              "sensory values before the talk.")
+    _footer(s, n)
+    return s
+
+
+def slide_tasting(prs, n):
+    s = _blank(prs)
+    _title(s, "Tasting both beers",
+           kicker="3 - INTERPRETATION  -  OSKAR & ANJA",
+           badge="3  -  INTERPRETATION",
+           badge_fill=CARD_A, badge_color=AMBER_DARK)
+
+    _card(s, Inches(0.6), Inches(1.95), Inches(5.95), Inches(4.55),
+          "Dark Day - Oskar",
+          ["Appearance: [ ... ]",
+           "Aroma: [ ... ]",
+           "Flavour: [ ... ]",
+           "Mouthfeel: [ ... ]",
+           "Overall: [ ... ]"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=13)
+
+    _card(s, Inches(6.75), Inches(1.95), Inches(5.98), Inches(4.55),
+          "Mango Maracuya Dream - Anja",
+          ["Appearance: [ ... ]",
+           "Aroma: [ ... ]",
+           "Flavour: [ ... ]",
+           "Mouthfeel: [ ... ]",
+           "Overall: [ ... ]"],
+          fill=CARD_B, head_color=BRAND, body_size=13)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("Taste both beers with the audience - the sensory result is the other "
+             "half of the interpretation.", 12, True, AMBER_DARK)]])
+    _notes(s, "13:15-14:15 | Oskar & Anja. Taste both beers and describe them: "
+              "appearance, aroma, flavour, mouthfeel, overall. Fill in the notes "
+              "before the talk.")
+    _footer(s, n)
+    return s
+
+
+def slide_outlook(prs, n):
+    s = _blank(prs)
+    _title(s, "Outlook - the next iteration", kicker="4 - OUTLOOK",
+           badge="4  -  OUTLOOK", badge_fill=CARD_B, badge_color=BRAND)
+
+    _card(s, Inches(0.6), Inches(1.95), Inches(5.95), Inches(4.55),
+          "Technical improvements",
+          ["- MQTT authentication and a device allow-list - today anybody who can publish can inject values",
+           "- Per-device calibration instead of trusting the polynomial",
+           "- A second iSpindel so every beer is logged, not only the one with the sensor",
+           "- A push notification when a fermentation stalls or the battery is low",
+           "- A shared naming convention across all course batches",
+           "- An ERP / MES hand-off: batch records into quality assurance"],
+          fill=CARD_B, head_color=BRAND, body_size=12)
+
+    _card(s, Inches(6.75), Inches(1.95), Inches(5.98), Inches(4.55),
+          "User-facing improvements",
+          ["- A structured sensory sheet for the traditional assessment",
+           "- A mobile-first pass on the experiment dialogs",
+           "- Compare batches across cohorts, not only within one semester",
+           "- Export templates for QA and a one-click fermentation report",
+           "- Keep the Must core stable - Should and Could only add value on top"],
+          fill=CARD_A, head_color=AMBER_DARK, body_size=12)
+    _text(s, Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.35),
+          [[("The next iteration starts from a working Must core, not from a "
+             "new feature list.", 12, True, AMBER_DARK)]])
+    _notes(s, "14:15-14:45 | Outlook. Technical first, then user-facing. Close with: "
+              "the next iteration starts from a working Must core.")
+    _footer(s, n)
+    return s
+
+
+def slide_thanks(prs, n):
+    s = _blank(prs)
+    _add_box(s, 0, 0, SW, Inches(0.35), fill=AMBER)
+    _add_box(s, 0, Inches(0.35), SW, Inches(0.15), fill=BRAND)
+    _text(s, Inches(1.0), Inches(1.9), SW - Inches(2), Inches(1.2),
+          [[("Thank you - questions?", 42, True, INK)]])
+    _text(s, Inches(1.0), Inches(3.2), SW - Inches(2), Inches(2.4),
+          [[("Live dashboard:  http://[ hostname ]:8080", 16, True, BRAND)],
+           [("Repository:  [ link ]", 15, False, MUTED)],
+           [("D1 concept  -  D2 running system on the Pi  -  D3 source code "
+             "with README and config.yml", 15, False, MUTED)],
+           [("Oskar  -  Dark Day   |   Anja  -  Mango Maracuya Dream",
+             15, True, AMBER_DARK)]],
+          space_after=6)
+    _badge(s, "D4  -  THANK YOU", fill=CARD, color=MUTED, y=Inches(0.72))
+    _notes(s, "14:45-15:00 | Oskar & Anja. Thank you, invite questions. Keep the "
+              "live dashboard open for the demo during Q&A.")
     _footer(s, n)
     return s
 
@@ -316,299 +740,33 @@ def full_card(prs, n, title, kicker, speaker, heading, bullets, fill=CARD,
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-def build(path, theme=DEFAULT_THEME):
-    apply_theme(theme)
+def build(path):
     prs = Presentation()
     prs.slide_width = SW
     prs.slide_height = SH
     n = 0
 
-    # 1 - Title
     slide_title(prs, n + 1); n += 1
-
-    # 2 - Agenda + speaker split
     slide_agenda(prs, n + 1); n += 1
-
-    # 3 - Why this project exists (both)
-    full_card(prs, n + 1, "Why this project exists", "MOTIVATION", None,
-              "The gap the system closes",
-              ["- [ Today gravity is measured by hand: a few spot values, every sample opens the",
-               "  fermenter and adds a contamination risk ]",
-               "- [ 'Measured values are only valuable if they are stored reliably, assigned to the",
-               "  correct batch and remain accessible later' - exactly this gap is our project ]",
-               "- [ Four benefits: process control, quality & traceability, learning from comparisons,",
-               "  transfer to industrial food production ]",
-               "- [ Non-goals: no actuators, no temperature control, no internet exposure ]"],
-              note="Both speak - A ~20 s on brewing reality, B ~20 s on the assignment sentence.")
-    n += 1
-
-    # 4 - The two beers (Speaker A + B, one column each)
-    two_col(prs, n + 1, "Our two beers - one per presenter", "THE BEER", "A",
-            "Beer 1 - [ name ] - Speaker A",
-            ["- Style: [ e.g. IPA ]",
-             "- Original gravity: [ e.g. 15.9 °P ]",
-             "- Malt: [ ... ]",
-             "- Hops: [ ... ]",
-             "- Yeast: [ ... ]",
-             "- Fermentation T: [ e.g. 19-21 °C ]",
-             "- Expected FG: [ ~3.2 °P ]"],
-            "Beer 2 - [ name ] - Speaker B",
-            ["- Style: [ e.g. Weissbier ]",
-             "- Original gravity: [ ... °P ]",
-             "- Malt: [ ... ]",
-             "- Hops: [ ... ]",
-             "- Yeast: [ ... ]",
-             "- Fermentation T: [ ... °C ]",
-             "- Expected FG: [ ... °P ]"],
-            hc_l=AMBER_DARK, hc_r=AMBER_DARK)
-    n += 1
-
-    # 5 - Recipe construction (Speaker A)
-    full_card(prs, n + 1, "How the recipe is built", "RECIPES", "A",
-              "Grain -> water -> hops -> yeast",
-              ["- [ Water: profile / treatment ]",
-               "- [ Mashing: temperature steps and why (e.g. 63 °C for fermentability) ]",
-               "- [ Boil: duration, hop schedule for bitterness / aroma ]",
-               "- [ Fermentation: yeast strain, pitch rate, temperature window ]",
-               "- [ Conditioning / dry hopping: what we plan and when ]"],
-              fill=CARD_A, head_color=AMBER_DARK,
-              note="Keep it short - this is the 'why'; the numbers sit in the recipes table.")
-    n += 1
-
-    # 6 - Brew day + the two brews (both)
-    two_col(prs, n + 1, "Brew day and fermentation plan", "PROCESS", None,
-            "Brew day - [ 29.10.2026 ]",
-            ["- [ Beer 1 brewed ]",
-             "- [ Beer 2 brewed ]",
-             "- [ iSpindel sanitised and placed in the fermenter ]",
-             "- [ Experiment started in the dashboard ]"],
-            "Fermentation plan",
-            ["- Lag phase: [ ~ hrs, nothing happens yet ]",
-             "- Main fermentation: [ gravity falls, temperature rises ]",
-             "- End: [ stable gravity over ~2-3 days ]",
-             "- [ Expected 7-10 days ]"],
-            fill_l=CARD_A, fill_r=CARD_B, hc_l=AMBER_DARK, hc_r=BRAND)
-    n += 1
-
-    # 7 - Architecture (Speaker A)
-    full_card(prs, n + 1, "Architecture on the automation pyramid", "CONCEPT (D1)", "A",
-              "iSpindel -> MQTT -> ingest -> PostgreSQL -> Dash",
-              ["- Field level: [ iSpindel - sensor in the fermenter ]",
-               "- Control level: [ Raspberry Pi - mosquitto + ingest (data acquisition only) ]",
-               "- Supervisory level (MES): [ PostgreSQL - device / experiment / measurement ]",
-               "- Enterprise level (ERP): [ out of scope ]",
-               "- [ Replace this text with a screenshot of the concept diagram ]"],
-              note="Point at the concept diagram (docs/concept.md section 1).")
-    n += 1
-
-    # 8 - Data model (Speaker A)
-    full_card(prs, n + 1, "Data model", "CONCEPT (D1)", "A",
-              "Separated, linked entities (FR-12)",
-              ["- device - [ mqtt_name, display_name, first_seen ]",
-               "- experiment - [ name (unique), device_id, started_at, ended_at, beer_style, og_plato ]",
-               "- measurement - [ device_id, experiment_id (nullable), recorded_at (UTC), tilt, temp,",
-               "  gravity, battery, interval, rssi ]",
-               "- experiment_event - [ occurred_at, note (dry hopping, temperature raised) ]",
-               "- [ One measurement = one row; no schema change for a new iSpindel or experiment ]"],
-              note="Insert the ER diagram screenshot from docs/concept.md section 2.")
-    n += 1
-
-    # 9 - Technology choice (Speaker A)
-    full_card(prs, n + 1, "Technology choice - and why", "CONCEPT (D1)", "A",
-              "What we picked and what we rejected",
-              ["- MQTT [ prescribed by the assignment as the data interface ]",
-               "- PostgreSQL 16 [ relational, timestamptz, constraints = data integrity ]",
-               "- Python ingest [ paho-mqtt, one row per transmission ]",
-               "- Plotly Dash + gunicorn [ interactive charts, pure Python, no JS build ]",
-               "- Podman/Docker Compose [ one stack on laptop and Pi - the same four containers ]",
-               "- [ Rejected: e.g. InfluxDB, Node-RED, a spreadsheet - and why ]"],
-              note="Justification is part of D1; keep alternatives visible.")
-    n += 1
-
-    # 10 - Live demo (Speaker A)
-    full_card(prs, n + 1, "Live demo of the running system", "LIVE SYSTEM (D4)", "A",
-              "On http://[ hostname ]:8080",
-              ["- [ Live device cards: latest gravity, temperature, tilt, battery (FR-13) ]",
-               "- [ Chart updates itself within 60 s (FR-14) ]",
-               "- [ Start a new experiment - required fields only (FR-01) ]",
-               "- [ End the experiment (FR-04), try a duplicate name (FR-02) ]",
-               "- [ Compare two experiments in one chart (FR-17) ]",
-               "- [ Export the batch as CSV and open it in Excel (FR-21) ]"],
-              fill=CARD_A, head_color=AMBER_DARK,
-              note="Keep a backup screenshot for every step in case the network fails.")
-    n += 1
-
-    # 11 - The two brewmaster questions (Speaker B)
-    two_col(prs, n + 1, "The two brewmaster questions", "INTERPRETATION", "B",
-            "Question 1 - needs historical data",
-            ["- [ e.g. 'Is the fermentation finished - is the gravity stable over 2-3 days?' ]",
-             "- [ Why historical: you compare today's value with the last days ]",
-             "- [ How the dashboard answers it: batch zones + rate °P/24h (FR-16, FR-20) ]"],
-            "Question 2 - needs a comparison",
-            ["- [ e.g. 'Which batch fermented faster - this year's or last year's?' ]",
-             "- [ Why comparison: two experiments overlaid (FR-17 / FR-18) ]",
-             "- [ How the dashboard answers it: overlay + relative time axis ]"],
-            fill_l=CARD_B, fill_r=CARD_B, hc_l=BRAND, hc_r=BRAND)
-    n += 1
-
-    # 12 - Reading the curve (Speaker B)
-    full_card(prs, n + 1, "Reading the fermentation curve", "INTERPRETATION", "B",
-              "Lag phase - main fermentation - end",
-              ["- Lag phase: [ gravity nearly flat, temperature follows ambient ]",
-               "- Main fermentation: [ gravity falls steeply, temperature rises (exothermic) ]",
-               "- End: [ gravity stable -> beer ready for the next step ]",
-               "- [ This is the hand sketch from the self-study - put it here as a picture ]",
-               "- [ Compare: what the sketch predicted vs. what our data actually shows ]"],
-              fill=CARD_B, head_color=BRAND,
-              note="Speaker B interprets as a user here - no code, just the meaning of the curve.")
-    n += 1
-
-    # 13 - Interpreting OUR beer (Speaker B)
-    two_col(prs, n + 1, "What our beer actually did", "INTERPRETATION", "B",
-            "Beer 1 - [ name ]",
-            ["- [ OG ... °P -> current ... °P ]",
-             "- [ Attenuation ... %, ABV ... % ]",
-             "- [ Rate ~... °P/24h ]",
-             "- [ Temperature stayed in / left the window ]",
-             "- [ Any anomaly and what it meant ]"],
-            "Beer 2 - [ name ]",
-            ["- [ OG ... °P -> current ... °P ]",
-             "- [ Attenuation ... %, ABV ... % ]",
-             "- [ Rate ~... °P/24h ]",
-             "- [ Temperature stayed in / left the window ]",
-             "- [ Any anomaly and what it meant ]"],
-            fill_l=CARD_B, fill_r=CARD_B, hc_l=BRAND, hc_r=BRAND)
-    n += 1
-
-    # 14 - Requirement checklist intro (Speaker B)
-    full_card(prs, n + 1, "Does it hold up? The requirement checklist", "REQUIREMENTS", "B",
-              "31 requirements: 22 Must, 8 Should, 1 Could",
-              ["- Experiment management: FR-01 - FR-06",
-               "- Data acquisition & storage: FR-07 - FR-12",
-               "- Dashboard & visualisation: FR-13 - FR-20",
-               "- Data access & export: FR-21 - FR-22",
-               "- Non-functional: NFR-01 - NFR-09",
-               "- [ Full checklist: presentation/requirements-checklist.md ]"],
-              fill=CARD_B, head_color=BRAND,
-              note="B is the non-developer voice: she/he checks the system the way a client would.")
-    n += 1
-
-    # 15 - Requirements part 1 (Must, experiment + data) (Speaker B)
-    two_col(prs, n + 1, "Checklist - experiment & data (Must)", "REQUIREMENTS", "B",
-            "Experiment management",
-            ["- FR-01 create + start [ MET ]",
-             "- FR-02 unique name [ MET ]",
-             "- FR-03 one iSpindel per experiment [ MET ]",
-             "- FR-04 end experiment [ MET ]",
-             "- FR-05 overview list [ MET ]"],
-            "Data acquisition",
-            ["- FR-07 all iSpindels via MQTT [ MET ]",
-             "- FR-08 all fields stored [ MET ]",
-             "- FR-09 auto-assign to active batch [ MET ]",
-             "- FR-11 no duplicates [ MET ]",
-             "- FR-12 separated data model [ MET ]"],
-            fill_l=CARD_B, fill_r=CARD_B, hc_l=BRAND, hc_r=BRAND)
-    n += 1
-
-    # 16 - Requirements part 2 (Must, dashboard + export + NFR) (Speaker B)
-    two_col(prs, n + 1, "Checklist - dashboard, export, NFR (Must)", "REQUIREMENTS", "B",
-            "Dashboard & export",
-            ["- FR-13 latest values per device [ MET ]",
-             "- FR-14 chart auto-update < 60 s [ MET ]",
-             "- FR-15 all iSpindels at once [ MET ]",
-             "- FR-16 any experiment, any range [ MET ]",
-             "- FR-17 two experiments overlaid [ MET ]",
-             "- FR-21 CSV export [ MET ]"],
-            "Non-functional Must",
-            ["- NFR-01 app + DB on the Pi [ MET ]",
-             "- NFR-02 LAN only, no internet [ MET ]",
-             "- NFR-03 auto start after power loss [ MET ]",
-             "- NFR-04 no data loss + backup [ MET ]",
-             "- NFR-05 non-programmer, English UI [ MET ]",
-             "- NFR-08 README + config file [ MET ]"],
-            fill_l=CARD_B, fill_r=CARD_B, hc_l=BRAND, hc_r=BRAND)
-    n += 1
-
-    # 17 - Should / Could (Speaker B)
-    full_card(prs, n + 1, "Checklist - Should and Could", "REQUIREMENTS", "B",
-              "What is expected on top of the Must core",
-              ["- FR-06 edit fields + record events [ Should ]",
-               "- FR-10 measurements without an active experiment are kept [ Should ]",
-               "- FR-18 relative time axis for comparison [ Should ]",
-               "- FR-19 stale device / low battery warning [ Should ]",
-               "- FR-22 export several experiments / a time range [ Should ]",
-               "- FR-20 derived values: attenuation, ABV, rate [ Could - done ]",
-               "- NFR-06 smartphone, NFR-07 < 5 s render, NFR-09 UTC + Europe/Zurich [ Should ]"],
-              fill=CARD_B, head_color=BRAND,
-              note="Mark each one honestly - Must first, then Should, then the one Could.")
-    n += 1
-
-    # 18 - Acceptance test T-01..T-08 (Speaker B)
-    two_col(prs, n + 1, "Acceptance test - the client's checklist", "REQUIREMENTS", "B",
-            "Tests T-01 - T-04",
-            ["- T-01 start/duplicate/in use/end [ FR-01-05 ]",
-             "- T-02 all iSpindels at once [ FR-07-09, FR-15 ]",
-             "- T-03 interval 1 min then 30 min [ FR-11 ]",
-             "- T-04 new measurement in < 60 s [ FR-13, FR-14 ]"],
-            "Tests T-05 - T-08",
-            ["- T-05 completed vs running experiment [ FR-16, FR-17 ]",
-             "- T-06 export -> Excel [ FR-21 ]",
-             "- T-07 pull the power, reconnect [ NFR-03, NFR-04 ]",
-             "- T-08 open from another device [ NFR-02 ]"],
-            fill_l=CARD_B, fill_r=CARD_B, hc_l=BRAND, hc_r=BRAND)
-    n += 1
-
-    # 19 - Outlook (both)
-    full_card(prs, n + 1, "Outlook - what we would improve next", "OUTLOOK", None,
-              "Honest gaps and the next iteration",
-              ["- [ e.g. MQTT authentication / a device allow-list to stop injection ]",
-               "- [ e.g. a shared naming convention across all course batches ]",
-               "- [ e.g. a push notification when a fermentation stalls ]",
-               "- [ e.g. calibration per device instead of trusting the polynomial ]",
-               "- [ e.g. an ERP/MES hand-off - batch records into quality assurance ]"],
-              note="A closes the technical wish list, B closes the user wish list.")
-    n += 1
-
-    # 20 - Thank you / questions (both)
-    s = _blank(prs)
-    _add_box(s, 0, 0, SW, Inches(0.35), fill=AMBER)
-    _text(s, Inches(1.0), Inches(2.2), SW - Inches(2), Inches(1.4),
-          [[("Thank you - questions?", 40, True, INK)]])
-    _text(s, Inches(1.0), Inches(3.4), SW - Inches(2), Inches(2.0),
-          [[("Speaker A - [ name ]  |  Brewing & build", 16, True, AMBER_DARK)],
-           [("Speaker B - [ name ]  |  Brewmaster's voice & requirements", 16, True, BRAND)],
-           [("Live dashboard: http://[ hostname ]:8080", 15, False, MUTED)],
-           [("Repository: [ link ] - concept (D1), README (NFR-08), self-tests", 15, False, MUTED)]])
-    _speaker_tag(s, None)
-    _footer(s, n + 1)
-    n += 1
+    slide_architecture(prs, n + 1); n += 1
+    slide_data_model(prs, n + 1); n += 1
+    slide_technology(prs, n + 1); n += 1
+    slide_live_demo_placeholder(prs, n + 1); n += 1
+    slide_two_questions(prs, n + 1); n += 1
+    slide_sketch(prs, n + 1); n += 1
+    slide_mango(prs, n + 1); n += 1
+    slide_real_curve(prs, n + 1); n += 1
+    slide_real_length(prs, n + 1); n += 1
+    slide_dark_doubt(prs, n + 1); n += 1
+    slide_tasting(prs, n + 1); n += 1
+    slide_outlook(prs, n + 1); n += 1
+    slide_thanks(prs, n + 1); n += 1
 
     prs.save(path)
     return n
 
 
 if __name__ == "__main__":
-    import sys
-
-    here = os.path.dirname(os.path.abspath(__file__))
-    theme = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in THEMES else DEFAULT_THEME
-
-    # the deck that is actually presented, built with the default template
-    out = os.path.join(here, "iSpindel_Final_Presentation.pptx")
-    count = build(out, theme=theme)
-    print(f"Wrote {count} slides -> {out}  (theme: {theme})")
-
-    # the template gallery: one full deck per theme, so a different look is
-    # one file away and needs no code change
-    tdir = os.path.join(here, "templates")
-    os.makedirs(tdir, exist_ok=True)
-    for name, spec in THEMES.items():
-        path = os.path.join(tdir, f"ispindel_template_{name}.pptx")
-        slides = build(path, theme=name)
-        print(f"  template {name:9s} [{spec['label']}] -> {path}  ({slides} slides)")
-
-
-
-
-
-
+    out = os.path.join(HERE, "iSpindel_Final_Presentation.pptx")
+    count = build(out)
+    print(f"Wrote {count} slides -> {out}")

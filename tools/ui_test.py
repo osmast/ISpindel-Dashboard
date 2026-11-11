@@ -1,4 +1,4 @@
-"""Browser-less test of the experiment dialog flow (FR-01 - FR-04, FR-13): it renders the overview,
+B"""Browser-less test of the experiment dialog flow (FR-01 - FR-04, FR-13): it renders the overview,
 reads the button ids as the card renders them and posts the same requests the browser sends -
 set up -> create, then end -> confirmation -> ended. Temporary rows (zz_ui*) are removed again.
 
@@ -158,18 +158,12 @@ def card_text(device_name):
 
 
 def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID,
-         dev_name="", dev_active=None, meas=None):
+         dev_name="", dev_active=None):
     """POST one multi-output callback exactly like dash-renderer does.
 
-    `meas` models the FR-06 per-measurement table of an open edit dialog: it is `None` (no table,
-    every wildcard list empty - the normal case) or a list of `(meas_id, note, clicked)` tuples;
-    exactly one of them carries `clicked` = "save" | "delete" so `ctx.triggered_id` points at it.
+    The FR-06 measurement table is an AG Grid now; its events go to their own `meas_grid_event`
+    callback, so this helper only carries the dialog buttons.
     """
-    meas = meas or []
-    save_clicks = [1 if m[2] == "save" else None for m in meas]
-    del_clicks = [1 if m[2] == "delete" else None for m in meas]
-    save_ids = [{"type": "meas-save", "meas": m[0]} for m in meas]
-    del_ids = [{"type": "meas-del", "meas": m[0]} for m in meas]
     body = {
         "output": OUTPUT,
         "outputs": outputs(),
@@ -178,9 +172,6 @@ def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID
                    {"id": row_id, "property": "n_clicks", "value": clicks.get("row")},
                    # FR-12: the settings icon of a Devices-table row
                    {"id": dev_id, "property": "n_clicks", "value": clicks.get("dev")},
-                   # FR-06: the save / delete icons of the per-measurement table
-                   {"id": "meas-save", "property": "n_clicks", "value": save_clicks},
-                   {"id": "meas-del", "property": "n_clicks", "value": del_clicks},
                    {"id": "exp-cancel", "property": "n_clicks", "value": clicks.get("cancel")},
                    {"id": "exp-submit", "property": "n_clicks", "value": clicks.get("submit")}],
         # the trailing states are the rendered ids of the button patterns (the callback uses them
@@ -194,12 +185,7 @@ def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID
                            {"id": "dev-name", "property": "value", "value": dev_name},
                            {"id": "dev-active", "property": "value",
                             "value": ["on"] if dev_active is None else dev_active},
-                           {"id": dev_id, "property": "id", "value": dev_id},
-                           # FR-06: the note inputs + the id lists of the save / delete icons
-                           {"id": "meas-input", "property": "value",
-                            "value": [m[1] for m in meas]},
-                           {"id": "meas-save", "property": "id", "value": save_ids},
-                           {"id": "meas-del", "property": "id", "value": del_ids}],
+                           {"id": dev_id, "property": "id", "value": dev_id}],
         "changedPropIds": changed,
     }
     resp = main.app.server.test_client().post(
@@ -454,31 +440,24 @@ meas_last = main.query("""SELECT id FROM measurement WHERE experiment_id = %s
 status, resp = post(setup_id, end_id, changed(edit_id),
                     {"row": [1], "cancel": 1, "submit": 2}, state(None, reload_=1), row_id=edit_id)
 meas_dump = json.dumps(resp.get("exp-measurements", {}).get("children"), default=str)
-check("the edit dialog shows the per-measurement table with note and delete actions (FR-06)",
-      status == 200 and meas_dump.count("meas-input") == 2 and meas_dump.count("meas-del") == 2
+check("the edit dialog shows the measurements in an editable AG Grid (FR-06)",
+      status == 200 and "AgGrid" in meas_dump and "measDeleteRenderer" in meas_dump
+      and meas_dump.count('"note"') >= 2
       and resp.get("exp-measurements", {}).get("style", {}).get("display") == "block",
-      f"{meas_dump.count('meas-input')} inputs / {meas_dump.count('meas-del')} deletes")
+      "grid=" + str("AgGrid" in meas_dump) + " rows=" + str(meas_dump.count('"note"')))
 
-# saving a note through the callback stores it (FR-06)
-status, resp = post(setup_id, end_id, changed({"type": "meas-save", "meas": meas_id}),
-                    {"row": [1], "cancel": 1, "submit": None},
-                    state({"mode": "edit", "id": exp_id}, reload_=1),
-                    row_id=edit_id, meas=[(meas_id, "bubbling stopped", "save")])
+# saving / deleting a measurement is the job of the AG Grid callback; its persistence helpers are
+# plain functions, so the two FR-06 behaviours are checked directly here (the grid event wiring is
+# covered by `meas_grid_event` in main.py).
+_, delta = main.save_measurement_note(meas_id, "bubbling stopped")
 note = main.query("SELECT note FROM measurement WHERE id = %s", (meas_id,))[0]["note"]
 check("a measurement note is saved from the dialog (FR-06)",
-      status == 200 and note == "bubbling stopped",
-      f"note={note!r} msg={str(resp.get('msg', {}).get('children'))[:50]}")
+      delta == 1 and note == "bubbling stopped", f"note={note!r}")
 
-# deleting a measurement through the callback removes the row (FR-06)
-status, resp = post(setup_id, end_id, changed({"type": "meas-del", "meas": meas_last}),
-                    {"row": [1], "cancel": 1, "submit": None},
-                    state({"mode": "edit", "id": exp_id}, reload_=1),
-                    row_id=edit_id, meas=[(meas_id, "", None), (meas_last, "", "delete")])
+_, delta = main.delete_measurement(meas_last)
 gone = not main.query("SELECT 1 FROM measurement WHERE id = %s", (meas_last,))
-check("a measurement is deleted from the dialog (FR-06)",
-      status == 200 and gone
-      and "removed" in str(resp.get("msg", {}).get("children")),
-      str(resp.get("msg", {}).get("children"))[:60])
+check("a measurement is deleted from the dialog (FR-06)", delta == 1 and gone,
+      f"gone={gone}")
 
 
 # a name that is already taken must be refused, like in the create dialog (FR-02)

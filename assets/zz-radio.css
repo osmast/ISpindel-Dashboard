@@ -1,0 +1,101 @@
+/* Square, yellow selectors for the chart controls under the figure.
+ *
+ * `#chart-series` is a Checklist (two checkboxes: °P / °C), `#relative` and `#range` are
+ * RadioItems. Dash renders every option as `<label><input><span>…</span></label>`; the three
+ * groups are targeted by id, so nothing else on the page changes. The native circle/check is
+ * removed (`appearance: none`) and replaced by a square box that fills yellow when it is selected -
+ * the beer theme's accent against the light page background.
+ *
+ * Loaded after tailwind.css (the `zz-` prefix keeps it last), so it wins over the utilities.
+ */
+
+/* the label is the flex row: keep the square and the text on one vertical centre line */
+#chart-series label,
+#relative label,
+#range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.2;
+}
+
+#chart-series label span,
+#relative label span,
+#range label span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+#chart-series input,
+#relative input[type="radio"],
+#range input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  flex: 0 0 auto;
+  align-self: center;
+  /* optical nudge: with the pixel font the square reads ~1 px high next to the glyphs */
+  position: relative;
+  top: 1.8px;
+  vertical-align: middle;
+  border: 2px solid #64748b;          /* slate-500 */
+  border-radius: 3px;                 /* square, not a circle */
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+#chart-series input:hover,
+#relative input[type="radio"]:hover,
+#range input[type="radio"]:hover {
+  border-color: #a16207;              /* yellow-700 */
+}
+
+#chart-series input:checked,
+#relative input[type="radio"]:checked,
+#range input[type="radio"]:checked {
+  background-color: #facc15;          /* yellow-400 */
+  border-color: #a16207;              /* yellow-700 */
+  /* a pale inner ring makes the filled square read as a selected control */
+  box-shadow: inset 0 0 0 2px #fef9c3;
+}
+
+#chart-series input:focus-visible,
+#relative input[type="radio"]:focus-visible,
+#range input[type="radio"]:focus-visible {
+  outline: 2px solid #ca8a04;
+  outline-offset: 2px;
+}
+
+/* the small CSV export button in the controls row - same square/border language as the selectors */
+.csv-export {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 2px solid #64748b;          /* slate-500 */
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.csv-export:hover {
+  border-color: #a16207;              /* yellow-700 */
+  background-color: #fef9c3;          /* yellow-100 */
+  color: #92400e;                     /* amber-800 */
+}
+
+.csv-export:focus-visible {
+  outline: 2px solid #ca8a04;
+  outline-offset: 2px;
+}

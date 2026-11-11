@@ -1,0 +1,29 @@
+// iSpindel fermentation monitor - ER diagram (minimal, 16:9 slide version)
+// Only the entities, the key fields and the relationships - the full field list
+// is in er_diagram_full.dot. Render with:
+//   dot -Tsvg er_diagram_slide.dot -o er_diagram_slide.svg
+//   dot -Tpng -Gdpi=220 er_diagram_slide.dot -o er_diagram_slide.png
+digraph er_diagram_slide {
+    graph [rankdir=TB, splines=ortho, nodesep=0.5, ranksep=0.6,
+           pad=0.2, bgcolor="white", fontname="Helvetica"];
+    node  [shape=record, fontname="Helvetica", fontsize=12, penwidth=1.4,
+           color="#0057B7", style="rounded,filled"];
+    edge  [fontname="Helvetica", fontsize=10, color="#64748B", arrowsize=0.8,
+           dir=forward, arrowhead=crow];
+
+    mqtt_broker [label="{mqtt_broker|id : bigint  PK\l|label : text  UNIQUE\l|host : text\l}", fillcolor="#DBEAFE"];
+    device [label="{device|id : bigint  PK\l|broker_id : bigint  FK\l|mqtt_name : text\l}", fillcolor="#FEF3C7"];
+    experiment [label="{experiment|id : bigint  PK\l|name : text  UNIQUE  (FR-02)\l|device_id : bigint  FK\l|started_at : timestamptz\l|ended_at : timestamptz  (NULL = active)\l}", fillcolor="#FEF3C7"];
+    measurement [label="{measurement|id : bigint  PK\l|device_id : bigint  FK\l|experiment_id : bigint  FK  (NULL = unassigned)\l|recorded_at : timestamptz  (UTC)\l|gravity_plato : numeric\l|temp_c : numeric\l}", fillcolor="#DBEAFE"];
+    experiment_event [label="{experiment_event|id : bigint  PK\l|experiment_id : bigint  FK\l|occurred_at : timestamptz\l|kind : text\l}", fillcolor="#F1F5F9"];
+
+    // three columns, two rows
+    { rank=same; mqtt_broker; device; experiment; }
+    { rank=same; measurement; experiment_event; }
+
+    mqtt_broker -> device [xlabel="1 : N"];
+    device -> experiment [xlabel="1 : N"];
+    device -> measurement [xlabel="1 : N"];
+    experiment -> measurement [xlabel="1 : N"];
+    experiment -> experiment_event [xlabel="1 : N"];
+}

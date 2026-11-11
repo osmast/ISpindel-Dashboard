@@ -133,15 +133,14 @@ details[data-card][open]::details-content {
   animation: toast-life 10s ease-out forwards;
 }
 
-/* The pointer of the dashboard, in two layers.
+/* The pointer of the dashboard: **one** static beer glass, assets/cursor-beer.svg / .png.
  *
- * 1. The static glass cursors: assets/cursor-beer.svg/png (empty glass) and
- *    assets/cursor-beer-hover.svg/png (full glass with a head of foam) - the same glass as the live
- *    one below, at the 32 x 32 size a cursor image wants.
- * 2. The live glass of assets/cursor.js, which follows the mouse and fills up on hover. The script
- *    adds `beer-cursor` to the root element as its **last** step, and that class is what hides the
- *    native pointer - so layer 1 is what a reader without JavaScript or with reduced motion keeps
- *    (and nothing looks half-broken if the script never runs).
+ * The former second layer - a live DOM glass of assets/cursor.js that followed the mouse and
+ * filled up on hover, plus the `cursor-beer-hover.svg` / `.png` variant for clickable elements -
+ * was removed. It swapped images on hover and ran a mousemove handler, which is what made the
+ * pointer feel jittery. The hover variant is gone; clickable elements inherit the same glass.
+ * assets/zz-cursor.css is the runtime override that wins over the compiled tailwind.css
+ * (which still carries the old hover rule until the CSS is rebuilt from this file).
  *
  * The raster file comes first in the chain, because only Chromium 122+/Edge understands an SVG
  * cursor while Firefox and Safari fall through to the image and then to the normal pointer. The
@@ -152,10 +151,8 @@ details[data-card][open]::details-content {
     cursor: url("cursor-beer.png") 7 7, url("cursor-beer.svg") 7 7, auto;
   }
 
-  /* Hover stays in the theme: everything the browser would give a hand cursor gets the filled
-   * glass. Plain CSS on purpose - an unlayered rule wins over the `cursor-pointer` utility the
-   * Python code puts on the rows - and it is the same set of elements that makes the trail of
-   * assets/bubbles.js fizz harder. */
+  /* Clickable elements keep the same single glass - no hover image swap. Plain CSS on purpose:
+   * an unlayered rule wins over the `cursor-pointer` utility the Python code puts on the rows. */
   a,
   button,
   summary,
@@ -167,7 +164,7 @@ details[data-card][open]::details-content {
   [role="checkbox"],
   [role="switch"],
   .cursor-pointer {
-    cursor: url("cursor-beer-hover.png") 7 7, url("cursor-beer-hover.svg") 7 7, pointer;
+    cursor: inherit;
   }
 }
 

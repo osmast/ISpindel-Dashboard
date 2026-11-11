@@ -9,7 +9,7 @@ FONT_FAMILY = '"IBM XGA-AI 12x20", ui-monospace, "SFMono-Regular", Menlo, Consol
 
 
 def fermentation_figure(series, relative=False, height=460, legend=True, mobile=False,
-                        x_range=None, series_pick="both", hover_overlay=False):
+                        x_range=None, series_pick="both"):
     """Gravity and temperature over time, on one y axis.
 
     series = [{"label": str, "points": [{"recorded_at", "gravity_plato", "temp_c"}]}].
@@ -19,9 +19,9 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
     empty time before an experiment's first measurement stays visible; ignored when `relative`.
 
     `series_pick` chooses what is drawn: "both" (gravity + temperature), "gravity" or
-    "temperature". `hover_overlay=False` (the default) hides Plotly's floating hover box and
-    instead feeds every trace's value into `customdata`, so the dashboard can print the readout
-    of the hovered timepoint **above the figure** (the upper legend) instead of over the plot.
+    "temperature". The hover readout is Plotly's **built-in** unified tooltip: with
+    `hovermode="x unified"` it prints every trace at the hovered timepoint in one box, so no
+    second callback (server or clientside) has to follow the pointer.
     """
     if mobile:
         legend = False
@@ -49,18 +49,21 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
             x = [p["recorded_at"] for p in points]
         # markers turn a dense series into a fat band - draw them only while they stay readable
         markers = len(points) <= 200
-        # customdata carries the raw values so the upper readout can print them without a second
-        # query; the number format is applied in the dashboard, not here
+        # the tooltip prints the **value and its unit** only: no x (date/time) and no series name
+        # (`<extra></extra>` closes Plotly's secondary name box). Its background is the colour of
+        # the group, so the label belongs to the curve under the pointer at a glance.
+        tip = dict(bgcolor=color, bordercolor=color,
+                   font=dict(color="#ffffff", size=11))
         if show_gravity:
             fig.add_trace(go.Scatter(
                 x=x, y=[p["gravity_plato"] for p in points], name=f"{s['label']} (°P)",
-                customdata=[[p["gravity_plato"], "°P", s["label"]] for p in points],
+                hovertemplate="%{y:.1f} °P<extra></extra>", hoverlabel=tip,
                 mode="lines+markers" if markers else "lines", line=dict(color=color),
                 marker=dict(size=5, color=color, line=dict(width=1, color="white"))))
         if show_temp:
             fig.add_trace(go.Scatter(
                 x=x, y=[p["temp_c"] for p in points], name=f"{s['label']} (°C)",
-                customdata=[[p["temp_c"], "°C", s["label"]] for p in points],
+                hovertemplate="%{y:.1f} °C<extra></extra>", hoverlabel=tip,
                 mode="lines", line=dict(color=color, dash="dot"), opacity=0.6))
 
     if not series:
@@ -69,22 +72,20 @@ def fermentation_figure(series, relative=False, height=460, legend=True, mobile=
 
     fig.update_layout(
         height=height,
-        autosize=height is None,
+        # autosize stays True even with a fixed height: Plotly then takes the **width** from the
+        # container and only keeps `height`. With `autosize=height is None` the main chart (height
+        # 460) fell back to Plotly's ~700 px default width and covered only half of a wide card.
+        autosize=True,
         # automargin on the axes grows these only as far as the tick labels and titles
         # need - that keeps the plot area as large as possible on a phone
         margin=dict(l=2 if mobile else 6, r=2 if mobile else 6,
                     t=28 if legend else 4, b=6),
         showlegend=legend,
         font=dict(family=FONT_FAMILY, size=10 if mobile else 12),
-        hovermode="x unified",
-        # Before: an opaque dark box floating over the plot. Now the values are printed above the
-        # figure (`hover_overlay=False`), so the box is made fully transparent and only the spike
-        # remains; `hover_overlay=True` keeps the old floating box (used by the small device cards,
-        # which have no readout strip of their own).
+        # built-in tooltip, one label per trace at the hovered x (the px / hovermode="x" recipe)
+        hovermode="x",
         hoverlabel=dict(bgcolor="#0f172a", bordercolor="#0f172a", namelength=-1,
-                        font=dict(color="#f8fafc", size=11)) if hover_overlay else
-                   dict(bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)", namelength=-1,
-                        font=dict(color="rgba(0,0,0,0)", size=11)),
+                        font=dict(color="#f8fafc", size=11)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         # transparent so the card's background (and its hover colour) shows through
         paper_bgcolor="rgba(0,0,0,0)",

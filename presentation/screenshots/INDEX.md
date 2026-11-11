@@ -4,9 +4,10 @@ Captured from the **production Pi** at `http://beer.chios.ch:8080` (real ferment
 4 iSpindels: MTB1, MTB3, MTB7, MTB9; 4 completed batches: *CoCo Jambo*, *Mango Maracuya Dream*,
 *Honig Bier*, *Lemon Pale Lager*).
 
-Use these on the D4 presentation slides (slide 10 "Live demo" backup, slide 5/13 beer data,
-slide 7/8 diagrams can be photographed from the ebook). Each file maps to a feature and the
-requirement it demonstrates.
+Use these on the D4 presentation slides: slide 6 (live-system overview), slide 7 (live-demo
+backup), slide 9 (comparison chart) and slide 10 (real batch data). The concept diagrams on
+slides 3-5 are drawn in the deck itself. Each file maps to a feature and the requirement it
+demonstrates.
 
 | File | What it shows | Requirement |
 | --- | --- | --- |

@@ -1,28 +1,11 @@
-/* Remembers which accordion cards are open.
+/* Accordion cards are native <details> elements - the browser opens and closes them itself, with no
+ * JavaScript involved.
  *
- * The cards are plain <details> elements, but update_dashboard() rebuilds the card tree every
- * refresh - a remounted <details> loses its `open` attribute. On every toggle the current open
- * set is written to the `open_cards` store, and main.py renders `open` from it again.
+ * The former custom open-state script was removed: it wrote the set to localStorage and re-applied
+ * it on every DOM mutation, which could close a card immediately after a click (the rebuild's
+ * MutationObserver raced the native toggle). Keeping <details> standard is both simpler and
+ * snappier: the state is handled by the browser, not by React or Dash.
+ *
+ * This file intentionally does nothing. It stays in the repository (and in the Dockerfile COPY
+ * list) so an old deployment that still references it does not 404.
  */
-(function () {
-    "use strict";
-
-    function publish() {
-        var open = {};
-        var cards = document.querySelectorAll("details[data-card]");
-        for (var i = 0; i < cards.length; i++) {
-            open[cards[i].dataset.card] = cards[i].open;
-        }
-        if (window.dash_clientside && window.dash_clientside.set_props) {
-            window.dash_clientside.set_props("open_cards", {data: open});
-        }
-    }
-
-    // `toggle` does not bubble, so listen in the capture phase
-    document.addEventListener("toggle", function (event) {
-        var target = event.target;
-        if (target && target.dataset && target.dataset.card !== undefined) {
-            publish();
-        }
-    }, true);
-})();
