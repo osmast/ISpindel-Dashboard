@@ -8,7 +8,7 @@ and deleted again before it exits; the script exits non-zero if any check fails.
 import json
 import sys
 import time
-from datetime import timedelta, timezone
+from datetime import timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -661,63 +661,6 @@ check("FR-05/FR-12 running, completed and devices are separate tabs of one panel
 # the panel of the table has no heading line any more (the two tab labels say what is shown)
 check("the FR-05 panel carries no repeated heading",
       "Experiments (FR-05)" not in json.dumps(main.app.layout.to_plotly_json(), default=str))
-
-# ---- FR-06: the per-measurement table of the edit dialog ----------------------
-# The edit dialog lists every measurement of the experiment, each with an editable note and a
-# delete icon. Deleting the **newest** row shortens the experiment: its end time follows the last
-# remaining measurement. The whole feature is exercised on a temporary completed experiment.
-main.execute("""INSERT INTO device (mqtt_name) VALUES ('zz_validation_meas')
-                ON CONFLICT DO NOTHING""")
-dev_meas = main.query("SELECT id FROM device WHERE mqtt_name = 'zz_validation_meas'")[0]["id"]
-base = main.query("SELECT now() - interval '10 days' AS t0")[0]["t0"]
-main.execute("""INSERT INTO experiment (name, device_id, started_at, ended_at)
-                VALUES ('zz_validation_meas', %s, %s, %s)""",
-             (dev_meas, base, base + timedelta(days=3)))
-exp_meas = main.query("SELECT id FROM experiment WHERE name = 'zz_validation_meas'")[0]["id"]
-for day in range(3):                     # rows on day 1, 2 and 3 (base + 1..3)
-    main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, gravity_plato)
-                    VALUES (%s, %s, %s, %s)""",
-                 (dev_meas, exp_meas, base + timedelta(days=1 + day), 10 + day))
-meas_ids = [r["id"] for r in main.query(
-    "SELECT id FROM measurement WHERE experiment_id = %s ORDER BY recorded_at", (exp_meas,))]
-
-grid = plain(main.measurement_form(exp_meas))
-grid_rows = main.measurement_grid_rows(exp_meas)
-fields = [column.get("field") for column in main.MEAS_COLUMNS]
-check("FR-06 the edit dialog lists every measurement in an editable AG Grid",
-      "AgGrid" in json.dumps(grid, default=str)
-      and len(grid_rows) == 3
-      and fields[:5] == ["time", "tilt", "temp", "gravity", "battery"]
-      and any(column.get("editable") for column in main.MEAS_COLUMNS)
-      and any(column.get("cellRenderer") == "measDeleteRenderer"
-              for column in main.MEAS_COLUMNS),
-      f"{len(grid_rows)} rows / fields={fields}")
-
-alert, delta = main.save_measurement_note(meas_ids[0], "dry hopped")
-stored_note = main.query("SELECT note FROM measurement WHERE id = %s", (meas_ids[0],))[0]["note"]
-check("FR-06 a measurement note is stored", delta == 1 and stored_note == "dry hopped",
-      str(stored_note))
-
-alert, delta = main.delete_measurement(meas_ids[2])          # the newest row (day 3)
-end_after = main.query("SELECT ended_at FROM experiment WHERE id = %s", (exp_meas,))[0]["ended_at"]
-expected = base + __import__("datetime").timedelta(days=2)   # -> the day-2 row is the last now
-check("FR-06 deleting the newest measurement shortens the experiment's end time",
-      delta == 1 and end_after == expected, f"{end_after} vs {expected}")
-
-end_before = end_after
-main.delete_measurement(meas_ids[0])                        # an old row: the end must not move
-end_unchanged = main.query("SELECT ended_at FROM experiment WHERE id = %s",
-                           (exp_meas,))[0]["ended_at"]
-check("FR-06 deleting an older measurement leaves the end time alone",
-      end_unchanged == end_before, f"{end_unchanged} vs {end_before}")
-
-main.delete_measurement(meas_ids[1])                       # last row: end stays (nothing to anchor)
-check("FR-06 deleting the last remaining row keeps the stored end time",
-      main.query("SELECT ended_at FROM experiment WHERE id = %s",
-                 (exp_meas,))[0]["ended_at"] == end_before
-      and main.query("SELECT count(*) AS n FROM measurement WHERE experiment_id = %s",
-                     (exp_meas,))[0]["n"] == 0)
-
 
 # ---- FR-21 / FR-22 / NFR-05: export ------------------------------------------
 # A range without a single measurement is a valid answer, not an error: download_csv then returns

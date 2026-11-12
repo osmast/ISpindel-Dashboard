@@ -6,7 +6,6 @@
 dash>=3.0                        # web dashboard (Flask + React underneath)
 dash-mantine-components>=2.8,<3  # dmc.Grid for the card layout (v3 needs React 19 / new props)
 dash-iconify>=0.1                # pencil / trash / chart / download icons of the tables
-dash-ag-grid>=31.0               # virtualised measurement grid in the edit dialog (FR-06)
 plotly>=6.0                      # dials and fermentation charts
 paho-mqtt>=2.1                   # MQTT client of the ingest service
 psycopg[binary]>=3.2             # PostgreSQL driver (dashboard + ingest)

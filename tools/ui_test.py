@@ -32,9 +32,6 @@ def outputs():
             {"id": "exp-form", "property": "style"},
             {"id": "dev-form", "property": "children"},
             {"id": "dev-form", "property": "style"},
-            # FR-06: the per-measurement table
-            {"id": "exp-measurements", "property": "children"},
-            {"id": "exp-measurements", "property": "style"},
             {"id": "msg", "property": "children"},
             {"id": "modal-msg", "property": "children"},
             {"id": "reload", "property": "data"},
@@ -159,11 +156,7 @@ def card_text(device_name):
 
 def post(setup_id, end_id, changed, clicks, states, row_id=ROW_ID, dev_id=DEV_ID,
          dev_name="", dev_active=None):
-    """POST one multi-output callback exactly like dash-renderer does.
-
-    The FR-06 measurement table is an AG Grid now; its events go to their own `meas_grid_event`
-    callback, so this helper only carries the dialog buttons.
-    """
+    """POST one multi-output callback exactly like dash-renderer does."""
     body = {
         "output": OUTPUT,
         "outputs": outputs(),
@@ -425,40 +418,12 @@ check("the edit icon opens the dialog prefilled with that experiment (FR-06)",
       resp.get("exp-modal", {}).get("title") == "Edit experiment"
       and "zz_ui_exp" in form and "US-05" in form and "from the dialog" in form,
       f"title={resp.get('exp-modal', {}).get('title')!r}")
-
-# FR-06: the edit dialog carries the per-measurement table - a note input and a delete icon per
-# row. This experiment gets two measurements so the table is non-empty.
-main.execute("""INSERT INTO measurement (device_id, experiment_id, recorded_at, tilt_deg, gravity_plato)
-                VALUES (%s, %s, now() - interval '2 hours', 60, 12.5),
-                       (%s, %s, now() - interval '1 hour', 61, 12.0)""",
-              (DEV, exp_id, DEV, exp_id))
-meas_id = main.query("""SELECT id FROM measurement WHERE experiment_id = %s
-                        ORDER BY recorded_at LIMIT 1""", (exp_id,))[0]["id"]
-meas_last = main.query("""SELECT id FROM measurement WHERE experiment_id = %s
-                          ORDER BY recorded_at DESC LIMIT 1""", (exp_id,))[0]["id"]
-
-status, resp = post(setup_id, end_id, changed(edit_id),
-                    {"row": [1], "cancel": 1, "submit": 2}, state(None, reload_=1), row_id=edit_id)
-meas_dump = json.dumps(resp.get("exp-measurements", {}).get("children"), default=str)
-check("the edit dialog shows the measurements in an editable AG Grid (FR-06)",
-      status == 200 and "AgGrid" in meas_dump and "measDeleteRenderer" in meas_dump
-      and meas_dump.count('"note"') >= 2
-      and resp.get("exp-measurements", {}).get("style", {}).get("display") == "block",
-      "grid=" + str("AgGrid" in meas_dump) + " rows=" + str(meas_dump.count('"note"')))
-
-# saving / deleting a measurement is the job of the AG Grid callback; its persistence helpers are
-# plain functions, so the two FR-06 behaviours are checked directly here (the grid event wiring is
-# covered by `meas_grid_event` in main.py).
-_, delta = main.save_measurement_note(meas_id, "bubbling stopped")
-note = main.query("SELECT note FROM measurement WHERE id = %s", (meas_id,))[0]["note"]
-check("a measurement note is saved from the dialog (FR-06)",
-      delta == 1 and note == "bubbling stopped", f"note={note!r}")
-
-_, delta = main.delete_measurement(meas_last)
-gone = not main.query("SELECT 1 FROM measurement WHERE id = %s", (meas_last,))
-check("a measurement is deleted from the dialog (FR-06)", delta == 1 and gone,
-      f"gone={gone}")
-
+# The dialog used to carry an AG Grid with every measurement of the experiment; a 10-day run at a
+# 30 s interval is ~29 000 rows, and transferring + mounting them in the browser froze the tab.
+# The edit dialog must now answer with the form only.
+check("the edit dialog transfers the form only - no measurement list (FR-06, no AG Grid)",
+      not any("meas" in key.lower() for key in resp) and "AgGrid" not in form,
+      f"outputs={sorted(resp)}")
 
 # a name that is already taken must be refused, like in the create dialog (FR-02)
 status, resp = post(setup_id, end_id, ["exp-submit.n_clicks"],

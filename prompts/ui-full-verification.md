@@ -196,10 +196,6 @@ in a snapshot; the id is what the callback matches on.
 | Yeast | `new-yeast` | optional |
 | Responsible | `new-responsible` | optional |
 | Notes | `new-notes` | optional |
-| Measurement table | `exp-measurements` | edit mode only |
-| Note input (per row) | `{"type":"meas-input","meas":<id>}` | FR-06 |
-| Save note | `{"type":"meas-save","meas":<id>}` | FR-06 |
-| Delete measurement | `{"type":"meas-del","meas":<id>}` | FR-06 |
 | Device form | `dev-form` | FR-12 |
 | Display name | `dev-name` | FR-12 |
 | In use | `dev-active` | checklist, FR-12 |
@@ -251,17 +247,17 @@ One row per requirement. "Ref shot" is the reference screenshot in
 | FR-03 | M | One iSpindel per experiment, at most one active | a running card has **no** `setup-btn`; a second create is refused | `this iSpindel already runs an experiment - end it first (FR-03)` | - |
 | FR-04 | M | End an active experiment | card `end-btn` (or row `end`) → dialog "End experiment" → `exp-submit` | read-only fields + amber warning; toast `… ended - new measurements are no longer assigned to it (FR-04)` | not captured (see INDEX) |
 | FR-05 | M | Overview of all experiments | tabs `Running (n)` / `Completed (n)` | columns Name, iSpindel, Start Timestamp, Status, Measurements, Beer style, OG °P, Yeast, Responsible, End Timestamp, Actions | `02_tab_completed.png` |
-| FR-06 | S | Edit fields + record events | row `edit` → dialog "Edit experiment" prefilled + measurement table | change fields → `Save changes` → toast `… updated (FR-06)`; note → `note saved (FR-06)`; delete row → `measurement removed (FR-06)` | `10_popup_edit_experiment.png` |
+| FR-06 | S | Edit fields + record events | row `edit` → dialog "Edit experiment" prefilled | change fields → `Save changes` → toast `… updated (FR-06)` | `10_popup_edit_experiment.png` |
 
 ### 6.2 Data acquisition and storage (FR-07 - FR-12)
 
 | ID | Prio | What to prove | Where | Expected | Ref shot |
 | --- | --- | --- | --- | --- | --- |
 | FR-07 | M | All iSpindels received via MQTT automatically | the overview shows one card per active device | six `SIM_` cards after seeding | `00_dashboard_overview.png` |
-| FR-08 | M | Every measurement stored with the minimum fields | expand a card; open the edit dialog's measurement table | tilt, temp, gravity, battery, interval, RSSI all visible | `06_device_card_expanded.png` |
+| FR-08 | M | Every measurement stored with the minimum fields | expand a card | tilt, temp, gravity, battery, interval, RSSI all visible | `06_device_card_expanded.png` |
 | FR-09 | M | Auto-assigned to the active experiment | a running experiment's chart/table fills with its device's data | measurements appear in the correct experiment | `03_chart_comparison_2experiments.png` |
 | FR-10 | S | Unassigned measurements kept | a device with no experiment still shows a card | card says `no experiment yet` and still shows data | `01_overview_top.png` |
-| FR-11 | M | No fixed interval, no duplicates | card footer `interval N s`; measurement table | one row per transmission | `06_device_card_expanded.png` |
+| FR-11 | M | No fixed interval, no duplicates | card footer `interval N s` | one row per transmission | `06_device_card_expanded.png` |
 | FR-12 | M | Linked entities; device master data | tab `Devices (n)`; `dev-btn` settings / delete | table with Name (MQTT topic), Broker (address), Display name, Status, First seen, Last measurement, Interval, Measurements, Actions | `05_tab_devices_brokers.png`, `12_popup_device_settings.png`, `13_popup_delete_ispindel_confirm.png` |
 
 ### 6.3 Dashboard and visualisation (FR-13 - FR-20)
@@ -331,16 +327,12 @@ Run these in order. Each step names the MCP tool to use. Re-snapshot before ever
 7. **FR-03:** the card that now runs an experiment shows **End experiment**, not **Set up
    experiment**; screenshot → `FR-03_one_active.png`.
 
-### 7.4 Edit an experiment and its measurements (FR-06)
+### 7.4 Edit an experiment (FR-06)
 
 1. Go to the `Completed` tab; `click` the row `edit` icon (pencil).
-2. `wait_for` the title `Edit experiment`; `take_snapshot`; confirm the fields are prefilled and the
-   measurement table is shown.
+2. `wait_for` the title `Edit experiment`; `take_snapshot`; confirm the fields are prefilled.
 3. `take_screenshot` → `10_popup_edit_experiment.png`.
 4. Change `new-yeast`; `click` **Save changes**; `wait_for` `updated (FR-06)`.
-5. Re-open the edit dialog; type a note into a `meas-input`; `click` its `meas-save`; `wait_for`
-   `note saved (FR-06)`.
-6. `click` a `meas-del`; `wait_for` `measurement removed (FR-06)`.
 
 ### 7.5 End an experiment (FR-04)
 

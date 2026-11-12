@@ -3,13 +3,13 @@
 Run:  python main.py                              ->  http://localhost:8080
       gunicorn main:server -b 0.0.0.0:8080
 """
+import hashlib
 import os
 import socket
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 import dash
-import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import psycopg
 from dash import ALL, Input, Output, State, ctx, dcc, html
@@ -114,7 +114,6 @@ def device_form(values=None, disabled=False):
     ])
 
 
-
 def broker_form(values=None):
     """The fields of the FR-15 broker dialog - defined **above** `layout()` on purpose: the static
     layout renders it as the initial children of `#broker-form`, because Dash validates a callback's
@@ -160,13 +159,26 @@ def broker_form(values=None):
     ])
 
 
-
 # Dash links every .css/.js under assets/ automatically. `assets_ignore` matches file names
 # (skip the Tailwind source input.pcss); `assets_path_ignore` matches path levels (skip
 # node_modules, the npm install that builds the CSS - it is full of package stylesheets).
 app = dash.Dash(__name__, title="iSpindel Monitor", assets_ignore=r"\.pcss$",
                 assets_path_ignore=[r"node_modules"])
 server = app.server                                   # gunicorn entry point
+
+
+@server.after_request
+def no_stale_dashboard(response):
+    """Never let the browser reuse a page from before a rebuild.
+
+    A rebuild changes the callback map (e.g. a removed output). A cached page keeps the old map,
+    so its clicks are sent with an output key the new server does not know - Dash answers 500 and
+    the UI waits forever, which looks like a hang. The page and the Dash endpoints are therefore
+    not cached; static assets keep their own caching.
+    """
+    if response.mimetype == "text/html" or request.path.startswith("/_dash-"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def layout():
@@ -226,8 +238,8 @@ def layout():
         ui.card(None,
                 # FR-14/FR-17: the hover readout is Plotly's built-in tooltip (see
                 # `charts.fermentation_figure`), so the card holds the figure directly.
-                # `width: 100%` plus assets/plot_resize.js: the figure follows the card width on a
-                # phone and after a tab / modal / breakpoint change, not only on a window resize.
+                # `width: 100%` lets Plotly follow the card width on a phone and after a tab /
+                # breakpoint change.
                 dcc.Graph(id="chart", config=GRAPH_CONFIG, style={"width": "100%"}),
                 # FR-16/FR-18/FR-20: three responsive breakpoints for the **bare** option groups
                 # (no captions above them), and a group wraps whole:
@@ -284,8 +296,7 @@ def layout():
         # on every refresh; `exp-target` holds the device whose dialog is open (None = closed).
         dcc.Store(id="exp-target", data=None),
         dmc.Modal(
-            # `xl`: the edit dialog carries the AG Grid with the time / numeric / note / action
-            # columns - a `lg` modal was too narrow to reach the note and delete columns
+            # `xl`: the dialog stays comfortable for the two-column form and the device fields
             id="exp-modal", title="Set up experiment", opened=False, centered=True, size="xl",
             # Closed through the buttons only - a self-closing modal leaves Dash's `opened` at True.
             withCloseButton=False, closeOnClickOutside=False, closeOnEscape=False,
@@ -293,9 +304,6 @@ def layout():
                 html.Div(id="modal-msg", className="mb-3"),
                 # rebuilt with the values of an existing experiment for FR-06 edit / delete
                 html.Div(id="exp-form", children=experiment_form()),
-                # FR-06: the per-measurement table (notes + delete) of the edited experiment; only
-                # shown in edit mode - empty and hidden otherwise
-                html.Div(id="exp-measurements", style={"display": "none"}),
                 # FR-12: the device fields, hidden until the Devices table opens the dialog
                 html.Div(id="dev-form", style={"display": "none"}, children=device_form()),
                 html.Div(className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end",
@@ -470,26 +478,50 @@ def broker_host():
 
 # ---- callbacks ------------------------------------------------------------
 
+# One callback for the whole overview: the device cards (one Plotly figure each) and the tables.
+# The output list must stay exactly this, in this order: dash-renderer keys a request by the
+# outputs of the page it loaded with, so moving an output to another callback makes the *open*
+# page send a key the server no longer has - Dash answers 500 and the page looks frozen until it
+# is reloaded. `assets/build_check.js` now reloads the page when that key changes (see the end of
+# this file); keeping one callback also keeps `reload` and the dialog from rebuilding charts for
+# no reason (see the trigger check below).
+#
+# `ctx.triggered` is read instead of rebuilding everything blindly:
+#   * dialog open / close -> nothing at all (no chart remount during the modal transition)
+#   * tick / viewport     -> cards + tables
+#   * reload (a write)    -> tables only; the four Plotly cards wait for the next tick
 @app.callback(Output("devices", "children"), Output("devices-table", "children"),
               Output("exp-running", "children"), Output("exp-completed", "children"),
               Output("exp-tab-running", "children"), Output("exp-tab-completed", "children"),
               Output("exp-tab-devices", "children"),
               Input("tick", "n_intervals"), Input("reload", "data"),
               Input("viewport", "data"),
+              # the dialog is an Input so its open/close is visible here - and deliberately a
+              # no-op; as a blind rebuild it remounted every chart on close ("freeze after close")
+              Input("exp-modal", "opened"),
               # `chart-select` is **State**, not Input: toggling an experiment in the chart (FR-17)
               # must not rebuild the whole page tree. The row icon is recoloured by the clientside
               # `toggle_chart` callback below; this State only keeps the colour correct across the
               # 15 s refresh, which re-renders the tables.
               State("chart-select", "data"))
-def update_dashboard(_, __, viewport, selected):
+def update_dashboard(_, __, viewport, opened, selected):
     """The device cards, the three experiment-panel views (FR-05 running / completed + FR-12)
     and the tab labels with their counts."""
+    if opened:
+        return [dash.no_update] * 7
+    changed = {entry["prop_id"].rsplit(".", 1)[0] for entry in ctx.triggered}
+    if not changed & {"tick", "reload", "viewport"}:
+        return [dash.no_update] * 7          # the dialog opened / closed - nothing to repaint
     rows = experiment_rows()
     running = [r for r in rows if r["is_active"]]
     completed = [r for r in rows if not r["is_active"]]
     devices = device_rows()
     host = broker_host()
-    return (ispindel_overview({}, (viewport or {}).get("mobile", False), host),
+    # `reload` follows every experiment write: refresh the tables (plain HTML), keep the charts -
+    # rebuilding four Plotly figures after a name change is what made a save / close feel stuck.
+    cards = (dash.no_update if "reload" in changed else
+             ispindel_overview({}, (viewport or {}).get("mobile", False), host))
+    return (cards,
             device_table(devices, host),
             experiment_table(running, selected, empty="no experiment is running"),
             experiment_table(completed, selected, empty="no experiment has been completed yet"),
@@ -1019,182 +1051,6 @@ def experiment_table(rows, selected=(), empty="no data yet"):
             for r in rows]
     return ui.table(TABLE_HEADERS, body, empty=empty)
 
-# FR-06: the measurements of one experiment, editable inside the experiment dialog. Each row can
-# carry a note of its own and can be removed; removing the newest row shortens the experiment
-# (its end time follows the last remaining measurement).
-# FR-06: the measurement list is an AG Grid, not a table of Dash inputs. A fermentation easily has
-# hundreds of rows; rendering one `dcc.Input` + two ActionIcons per row made the edit dialog slow to
-# open. AG Grid virtualises the rows (only the visible ones reach the DOM), edits the note in place
-# and needs one component instead of 3 x N.
-MEAS_COLUMNS = [
-    {"field": "time", "headerName": "Time (local)", "editable": False, "width": 150},
-    {"field": "tilt", "headerName": "Tilt °", "editable": False, "width": 70},
-    {"field": "temp", "headerName": "Temp °C", "editable": False, "width": 85},
-    {"field": "gravity", "headerName": "Gravity °P", "editable": False, "width": 100},
-    {"field": "battery", "headerName": "Battery V", "editable": False, "width": 90},
-    # the note is the one editable column: single click opens the text editor and the
-    # `cellValueChanged` event stores it (`meas_grid_event`). The editor is named explicitly so
-    # the column stays editable regardless of the string-column default.
-    {"field": "note", "headerName": "Note", "editable": True, "minWidth": 150, "flex": 1,
-     "cellEditor": "agTextCellEditor"},
-    # the ✕ is drawn by assets/aggrid.js (`window.dashAgGridComponentFunctions`); the cell itself
-    # stays a normal AG Grid cell, so `cellClicked` still reports colId="actions"
-    {"field": "actions", "headerName": "", "editable": False, "width": 60,
-     "sortable": False, "resizable": False,
-     "cellRenderer": "measDeleteRenderer",
-     "cellStyle": {"display": "flex", "alignItems": "center", "justifyContent": "center"}},
-]
-
-
-def measurement_rows(exp_id):
-    """Every measurement of an experiment, oldest first (FR-06)."""
-    return query("""SELECT id, recorded_at,
-                           tilt_deg::float8 AS tilt_deg,
-                           temp_c::float8 AS temp_c,
-                           gravity_plato::float8 AS gravity_plato,
-                           battery_v::float8 AS battery_v,
-                           note
-                    FROM measurement WHERE experiment_id = %s
-                    ORDER BY recorded_at""", (exp_id,))
-
-
-def measurement_grid_rows(exp_id):
-    """The AG Grid `rowData` of one experiment - plain JSON, formatted for display."""
-    return [{"id": r["id"],
-             "time": f"{local(r['recorded_at']):%d. %b %y %H:%M:%S}",
-             "tilt": r["tilt_deg"], "temp": r["temp_c"],
-             "gravity": r["gravity_plato"], "battery": r["battery_v"],
-             "note": r["note"] or "", "actions": "delete"}
-            for r in measurement_rows(exp_id)]
-
-
-def measurement_form(exp_id):
-    """FR-06: the per-measurement grid of the edited experiment.
-
-    The note is edited **in place** and saved on `cellValueChanged`; the ✕ in the `actions` column
-    arrives as `cellClicked` (see `meas_grid_event`). Both use a pattern id, because the component
-    lives in the dialog content that exists only after `experiment_action` opens it - a literal id
-    would fail Dash's startup validation.
-    """
-    rows = measurement_grid_rows(exp_id)
-    title = html.H3("Measurements",
-                    className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500")
-    if not rows:
-        return html.Div(children=[
-            title,
-            html.P("this experiment has no measurements yet", className="text-sm text-slate-400"),
-        ])
-    return html.Div(children=[
-        title,
-        html.P("edit a note in place - it is saved when you leave the cell - or click the ✕ of a "
-               "row. Deleting the newest measurement moves the end time of a completed experiment "
-               "to the last remaining one (FR-06).",
-               className="mb-2 text-xs text-slate-400"),
-        dag.AgGrid(
-            id={"type": "meas-grid", "exp": exp_id},
-            rowData=rows,
-            columnDefs=MEAS_COLUMNS,
-            defaultColDef={"sortable": True, "resizable": True, "filter": False},
-            dashGridOptions={"singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
-                             "animateRows": True},
-            className="ag-theme-quartz",
-            style={"height": "min(60vh, 520px)", "width": "100%"},
-        ),
-    ])
-
-
-def save_measurement_note(meas_id, note):
-    """FR-06: store the note of one measurement. Returns (alert, reload_delta)."""
-    rows = query("SELECT id FROM measurement WHERE id = %s", (meas_id,))
-    if not rows:
-        return ui.alert("that measurement no longer exists", "amber"), 0
-    text = note.strip() or None if isinstance(note, str) else None
-    execute("UPDATE measurement SET note = %s WHERE id = %s", (text, meas_id))
-    return ui.alert("note saved (FR-06)", "green"), 1
-
-
-def delete_measurement(meas_id):
-    """FR-06: delete one measurement. Returns (alert, reload_delta).
-
-    When the deleted row was the **newest** of its experiment, the experiment's end time follows
-    down to the last remaining measurement - deleting the tail rows is what makes an experiment
-    shorter, and the stored end time must tell the same story (FR-04/FR-06). A completed
-    experiment is shortened; a running one (`ended_at IS NULL`) is left alone.
-    """
-    rows = query("""SELECT experiment_id, recorded_at FROM measurement WHERE id = %s""", (meas_id,))
-    if not rows:
-        return ui.alert("that measurement no longer exists", "amber"), 0
-    exp_id, removed_at = rows[0]["experiment_id"], rows[0]["recorded_at"]
-    execute("DELETE FROM measurement WHERE id = %s", (meas_id,))
-    tail = ""
-    if exp_id is not None:
-        exp = query("SELECT started_at, ended_at FROM experiment WHERE id = %s", (exp_id,))
-        newest = query("SELECT max(recorded_at) AS last FROM measurement WHERE experiment_id = %s",
-                       (exp_id,))[0]["last"]
-        if exp and exp[0]["ended_at"] is not None and (newest is None
-                                                       or newest < exp[0]["ended_at"]):
-            # the end time has to stay after the start (schema CHECK); anchor it at the newest row
-            if newest is not None and newest > exp[0]["started_at"]:
-                execute("UPDATE experiment SET ended_at = %s WHERE id = %s", (newest, exp_id))
-                tail = f" - end time moved to {local(newest):%d. %b %y %H:%M}"
-            elif newest is None:
-                tail = " - no measurements left, the end time stays"
-    return ui.alert(f"measurement removed (FR-06){tail}", "green"), 1
-
-
-
-
-
-def _grid_event(values):
-    """The first AG Grid event object out of a pattern-matching callback value.
-
-    With one grid the value is `[event]` (or `[[event]]` when the prop itself is a list), so this
-    flattens the wrapper Dash puts around each pattern component.
-    """
-    if isinstance(values, dict):
-        return values
-    if isinstance(values, (list, tuple)):
-        for item in values:
-            if isinstance(item, dict):
-                return item
-            if isinstance(item, (list, tuple)):
-                for inner in item:
-                    if isinstance(inner, dict):
-                        return inner
-    return None
-
-
-# FR-06: AG Grid events of the measurement floor. `cellValueChanged` saves the note that was just
-# edited, `cellClicked` handles the ✕ of the `actions` column. Only the grid's own `rowData` is
-# written back (no toast / `reload` duplicate): the next 15 s dashboard tick refreshes the counts,
-# and keeping this callback to one output means it cannot collide with `experiment_action`.
-@app.callback(Output({"type": "meas-grid", "exp": ALL}, "rowData"),
-              Input({"type": "meas-grid", "exp": ALL}, "cellValueChanged"),
-              Input({"type": "meas-grid", "exp": ALL}, "cellClicked"),
-              State({"type": "meas-grid", "exp": ALL}, "id"),
-              prevent_initial_call=True)
-def meas_grid_event(changed, clicked, ids):
-    id_list = click_values(ids)
-    skip = [dash.no_update for _ in id_list]
-    triggered = ctx.triggered_id
-    if not (isinstance(triggered, dict) and triggered.get("type") == "meas-grid"):
-        return skip
-    prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1]
-    exp_id = triggered.get("exp")
-    event = _grid_event(changed if prop == "cellValueChanged" else clicked)
-    if event is None or not isinstance(event.get("data"), dict):
-        return skip
-    if prop == "cellValueChanged":
-        if event.get("colId") == "note":
-            save_measurement_note(event["data"].get("id"), event.get("newValue"))
-        return skip
-    if event.get("colId") != "actions":
-        return skip
-    delete_measurement(event["data"].get("id"))
-    fresh = measurement_grid_rows(exp_id)
-    return [fresh if isinstance(item, dict) and item.get("exp") == exp_id else dash.no_update
-            for item in id_list]
-
 
 # FR-12: the device master data. A new iSpindel appears automatically (created by the ingest).
 DEVICE_HEADERS = ["Name (MQTT topic)", "Broker (address)", "Display name", "Status", "First seen",
@@ -1523,11 +1379,6 @@ def toggle_broker(broker_id):
                     f"{'resumed' if enabled else 'paused'} (FR-15)", "green"), 1
 
 
-
-
-
-
-
 # FR-17: toggling an experiment in the chart is pure client state. Keeping it in the browser
 # removes a server round trip per click **and** stops the click from rebuilding the whole page
 # tree (update_dashboard reads `chart-select` as State only). The same callback **merges** the
@@ -1801,8 +1652,6 @@ def delete_experiment(exp_id):
               # against the initial layout, so the (hidden) device fields must exist too.
               Output("exp-form", "children"), Output("exp-form", "style"),
               Output("dev-form", "children"), Output("dev-form", "style"),
-              # FR-06: the per-measurement table of the edited experiment
-              Output("exp-measurements", "children"), Output("exp-measurements", "style"),
               Output("msg", "children"), Output("modal-msg", "children"), Output("reload", "data"),
               # FR-21: the CSV row action writes the download here
               Output("download", "data"),
@@ -1839,38 +1688,29 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks,
     triggered = ctx.triggered_id
     target = target or {}
 
-    # the 14 outputs in order: exp-target, opened, title, submit label, exp-form children/style,
-    # dev-form children/style, exp-measurements children/style, msg, modal-msg, reload, download.
+    # the 12 outputs in order: exp-target, opened, title, submit label, exp-form children/style,
+    # dev-form children/style, msg, modal-msg, reload, download.
     hidden, shown = {"display": "none"}, {"display": "block"}
 
     def shape(*, target=dash.no_update, opened_=dash.no_update, title=dash.no_update,
               label=dash.no_update, exp_form=dash.no_update, exp_style=dash.no_update,
-              dev_form=dash.no_update, dev_style=dash.no_update, meas_form=dash.no_update,
-              meas_style=dash.no_update, message=dash.no_update,
+              dev_form=dash.no_update, dev_style=dash.no_update, message=dash.no_update,
               dialog=dash.no_update, reload_value=None, download=dash.no_update):
-        return (target, opened_, title, label, exp_form, exp_style, dev_form, dev_style, meas_form,
-                meas_style, message, dialog,
+        return (target, opened_, title, label, exp_form, exp_style, dev_form, dev_style,
+                message, dialog,
                 reload_data if reload_value is None else reload_value, download)
 
-    def opened(state, title, label, form, message="", device=False, measurements=None):
-        """Open the dialog - on the experiment form by default, on the device form for FR-12.
-
-        `measurements` (FR-06) is the per-measurement table of an edited experiment; it stays
-        hidden for every other mode (create / end / device).
-        """
-        meas = measurements if measurements is not None else []
-        meas_shown = shown if measurements is not None else hidden
+    def opened(state, title, label, form, message="", device=False):
+        """Open the dialog - on the experiment form by default, on the device form for FR-12."""
         if device:
             return shape(target=state, opened_=True, title=title, label=label, dev_form=form,
-                         dev_style=shown, exp_style=hidden, meas_form=[], meas_style=hidden,
-                         dialog=message)
+                         dev_style=shown, exp_style=hidden, dialog=message)
         return shape(target=state, opened_=True, title=title, label=label, exp_form=form,
-                     exp_style=shown, dev_style=hidden, meas_form=meas, meas_style=meas_shown,
-                     dialog=message)
+                     exp_style=shown, dev_style=hidden, dialog=message)
 
     def closed(message="", delta=0):
         return shape(target=None, opened_=False, message=message, dialog="",
-                     meas_form=[], meas_style=hidden, reload_value=reload_data + delta)
+                     reload_value=reload_data + delta)
 
     def nothing():
         return shape()
@@ -1936,11 +1776,17 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks,
         if triggered.get("mode") == "end":
             # FR-04: the same confirmation popup as the card's red button (device looked up here)
             return end_dialog(experiment_device(triggered.get("exp")))
-        # FR-06: the pencil / trash icon opens the same dialog, prefilled
+        # FR-06: the pencil / trash icon opens the same dialog, prefilled. Only the experiment's
+        # own fields are read here (`experiment_form_values`). No measurement is loaded into the
+        # dialog: the old version attached an AG Grid with the full measurement history, and a
+        # 10-day fermentation (~29 000 rows) had to be serialised and mounted in the browser before
+        # the dialog appeared - that is what froze the tab. The dialog is a normal Dash callback
+        # (`experiment_action`), there is nothing to render client-side.
         values = experiment_form_values(triggered.get("exp"))
         if values is None:
             return closed(ui.toast(ui.alert("that experiment no longer exists", "amber")))
         if triggered.get("mode") == "delete":
+            # one COUNT for the confirmation text - the rows themselves stay in the database
             measurements = query("SELECT count(*) AS n FROM measurement WHERE experiment_id = %s",
                                  (triggered.get("exp"),))[0]["n"]
             return opened({"mode": "delete", "id": triggered.get("exp")},
@@ -1948,8 +1794,7 @@ def experiment_action(setup_clicks, end_clicks, row_clicks, dev_clicks,
                           ui.alert(f"delete '{values['name']}' and its {measurements} "
                                    f"measurements? This cannot be undone.", "red"))
         return opened({"mode": "edit", "id": triggered.get("exp")},
-                      "Edit experiment", "Save changes", experiment_form(values),
-                      measurements=measurement_form(triggered.get("exp")))
+                      "Edit experiment", "Save changes", experiment_form(values))
     if isinstance(triggered, dict) and triggered.get("type") == "dev-btn":
         # FR-12: the icons of a Devices-table row (guarded by `clicked()` like the rest)
         if not clicked(triggered, dev_ids, dev_clicks):
@@ -2206,6 +2051,37 @@ def export_selected(_, ids, range_key):
         return dash.no_update, dash.no_update
     data, alert = download_csv(ids, range_key)
     return data, ui.toast(alert)
+
+
+# ---- build fingerprint ------------------------------------------------------
+# Dash keys every callback request by the list of **outputs** of the page it was loaded with.
+# When a deploy adds, removes or moves an output (the AG Grid removal did exactly that), an open
+# tab keeps sending the old key, the server answers 500 ("Callback function not found") and the
+# page appears frozen until it is reloaded by hand. The page therefore carries the fingerprint of
+# its callback map and `assets/build_check.js` reloads it when `/build` reports a different one.
+def callback_fingerprint():
+    """A short hash of the registered callback outputs - changes exactly when a page goes stale."""
+    keys = sorted(str(spec.get("output")) for spec in app._callback_list)
+    return hashlib.sha1("|".join(keys).encode()).hexdigest()[:12]
+
+
+BUILD = callback_fingerprint()
+
+
+@server.route("/build")
+def build():
+    """The fingerprint of the running process (polled by assets/build_check.js)."""
+    return BUILD, 200, {"Content-Type": "text/plain; charset=utf-8",
+                        "Cache-Control": "no-store"}
+
+
+# The page knows its own build without a second request. Guarded: if a future Dash ever ships no
+# index template through this attribute, the page simply carries no meta and the script no-ops
+# instead of the dashboard failing to start.
+_INDEX = app.index_string or ""
+if "</head>" in _INDEX:
+    app.index_string = _INDEX.replace(
+        "</head>", f'<meta name="ispindel-build" content="{BUILD}"></head>')
 
 
 if __name__ == "__main__":

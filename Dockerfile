@@ -22,9 +22,8 @@ COPY main.py ./
 COPY components/ components/
 COPY services/ services/
 COPY tools/ tools/
-COPY assets/tailwind.css assets/zz-ag-grid.css assets/zz-cursor.css assets/zz-radio.css assets/
-COPY assets/plot_resize.js assets/
-COPY assets/card_state.js assets/bubbles.js assets/cursor.js assets/aggrid.js assets/
+COPY assets/tailwind.css assets/zz-cursor.css assets/zz-radio.css assets/
+COPY assets/card_state.js assets/bubbles.js assets/cursor.js assets/build_check.js assets/
 COPY assets/favicon-beer.svg assets/cursor-beer.svg assets/cursor-beer.png assets/
 COPY assets/fonts/ assets/fonts/
 

@@ -21,7 +21,7 @@ The deck follows the four parts the assignment asks for in chapter
 | `requirements-checklist.md` | separate handout for the acceptance test (not repeated in the deck) |
 | `screenshots/` | 16 PNGs of every live feature + popup from the Pi, with `INDEX.md` |
 | `capture_screenshots.sh` | re-capture the static shots (curl check + headless Chrome) |
-| `db/` | the ER diagrams (Graphviz source + SVG + PNG) |
+| `db/` | the ER diagrams (Graphviz source + SVG + PNG); `db/er_diagram_views.*` includes both dashboard views, `db/README.md` justifies them |
 
 Rebuild the deck after editing `build_deck.py`:
 
